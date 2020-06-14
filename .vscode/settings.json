@@ -1,0 +1,12 @@
+{
+  "C_Cpp.clang_format_style": "file",
+
+  "editor.rulers": [100],
+  "editor.tabSize": 2,
+  "editor.formatOnSave": true,
+
+  "files.exclude": {
+    "build": true,
+    "vendor": true
+  }
+}
