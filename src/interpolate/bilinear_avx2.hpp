@@ -59,7 +59,7 @@ static inline __m256i calculate_weights(float x1, float y1, float x2, float y2) 
 }
 
 static inline void interpolate_two_pixels(__m256i p_bg, __m256i p_r0, __m256i weights,
-                                          cv::Vec3b* img_data) {
+                                          cv::Vec3b* output_pixels, bool can_write_third_pixel) {
   // Multiply with the pixel data and sum adjacent pairs to 32 bit ints
   // g g b b | g g b b
   __m256i r_bg = _mm256_madd_epi16(p_bg, weights);
@@ -81,14 +81,17 @@ static inline void interpolate_two_pixels(__m256i p_bg, __m256i p_r0, __m256i we
   int32_t stored[8];
   _mm256_store_si256((__m256i*) stored, out);
 
-  // Write pixel data back to image
-  int32_t pixel_1 = stored[0];
-  memcpy((void*) img_data, &pixel_1, 4);    // writing 4 bytes is faster than writing 3, and
-                                            // we are about to write the 4th byte again with
-                                            // the next pixel, so no harm done
+  // Write pixel data back to image.
+  // Faster to write 4 bytes instead of three when valid.
+  // Always valid for first pixel, because we are about to overwrite the second pixel anyway.
+  // Valid for second pixel only if we have been told so.
+  *reinterpret_cast<int32_t*>(output_pixels) = stored[0];
 
-  int32_t pixel_2 = stored[4];
-  *(img_data + 1) = {uint8_t(pixel_2), uint8_t(pixel_2 >> 8), uint8_t(pixel_2 >> 16)};
+  if (can_write_third_pixel) {
+    *reinterpret_cast<int32_t*>(output_pixels + 1) = stored[4];
+  } else {
+    *(output_pixels + 1) = *reinterpret_cast<cv::Vec3b*>(&stored[4]);
+  }
 }
 
 static constexpr uint8_t ZEROED = 128;
@@ -117,7 +120,7 @@ static const __m256i MASK_SHUFFLE_R0 = _mm256_set_m128i(MASK_SHUFFLE_R0_HALF, MA
 
 // Bilinear interpolation of 2 adjacent output pixels with the supplied coordinates using AVX2.
 static inline void interpolate(const cv::Mat3b& img, float x1, float y1, float x2, float y2,
-                               cv::Vec3b* out) {
+                               cv::Vec3b* output_pixels, bool can_write_third_pixel = false) {
   const int stride = img.step / 3;
 
   const cv::Vec3b* p0_0 = img.ptr<cv::Vec3b>(y1, x1);
@@ -131,7 +134,7 @@ static inline void interpolate(const cv::Mat3b& img, float x1, float y1, float x
 
   __m256i weights = calculate_weights(x1, y1, x2, y2);
 
-  interpolate_two_pixels(pixels_bg, pixels_r0, weights, out);
+  interpolate_two_pixels(pixels_bg, pixels_r0, weights, output_pixels, can_write_third_pixel);
 }
 
 }    // namespace interpolate::bilinear::avx2

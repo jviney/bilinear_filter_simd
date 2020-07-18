@@ -15,13 +15,18 @@ public:
   }
 
   virtual void operator()(const cv::Range& range) const override {
+    auto* range_last_output_pixels =
+        output_image_.ptr<cv::Vec3b>(range.end - 1, output_image_.cols - 2);
+
     for (auto y = range.start; y < range.end; y++) {
       for (auto x = 0; x < output_image_.cols; x += step) {
-        auto* output = output_image_.ptr<cv::Vec3b>(y, x);
         auto* px_coords = coords_.ptr<cv::Vec2f>(y, x);
+        auto* output_pixels = output_image_.ptr<cv::Vec3b>(y, x);
+        auto is_last_output_pixels = (output_pixels == range_last_output_pixels);
 
         interpolate::bilinear::avx2::interpolate(input_image_, px_coords[0][1], px_coords[0][0],
-                                                 px_coords[1][1], px_coords[1][0], output);
+                                                 px_coords[1][1], px_coords[1][0], output_pixels,
+                                                 !is_last_output_pixels);
       }
     }
   }

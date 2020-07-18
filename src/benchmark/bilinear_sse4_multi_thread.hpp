@@ -11,13 +11,17 @@ public:
       : input_image_(input_image), coords_(coords), output_image_(output_image) {}
 
   virtual void operator()(const cv::Range& range) const override {
+    auto* last_output_pixel = output_image_.ptr<cv::Vec3b>(range.end - 1, output_image_.cols - 1);
+
     for (auto y = range.start; y < range.end; y++) {
       for (auto x = 0; x < output_image_.cols; x++) {
-        auto* output = output_image_.ptr<cv::Vec3b>(y, x);
+        auto* output_pixel = output_image_.ptr<cv::Vec3b>(y, x);
         auto& px_coords = coords_(y, x);
 
-        *output =
-            interpolate::bilinear::sse4::interpolate(input_image_, px_coords[1], px_coords[0]);
+        auto is_last_output_pixel = (output_pixel == last_output_pixel);
+
+        interpolate::bilinear::sse4::interpolate(input_image_, px_coords[1], px_coords[0],
+                                                 output_pixel, !is_last_output_pixel);
       }
     }
   }

@@ -37,7 +37,8 @@ static inline __m128 calc_weights(float x, float y) {
   return weights;
 }
 
-static inline cv::Vec3b interpolate(const cv::Mat3b& img, float x, float y) {
+static inline void interpolate(const cv::Mat3b& img, float x, float y, cv::Vec3b* output_pixel,
+                               bool can_write_next_pixel) {
   const int stride = img.step / 3;
   const cv::Vec3b* p0 = img.ptr<cv::Vec3b>(y, x);
 
@@ -91,10 +92,13 @@ static inline cv::Vec3b interpolate(const cv::Mat3b& img, float x, float y) {
 
   // Extract the channels to create a cv::Vec3b
   int all_chans = _mm_cvtsi128_si32(out);
-  uint8_t chan1 = all_chans >> 0;
-  uint8_t chan2 = all_chans >> 8;
-  uint8_t chan3 = all_chans >> 16;
-  return {chan1, chan2, chan3};
+
+  // Faster to write 4 bytes instead of 3 when allowed
+  if (can_write_next_pixel) {
+    *reinterpret_cast<int32_t*>(output_pixel) = all_chans;
+  } else {
+    *output_pixel = *reinterpret_cast<cv::Vec3b*>(&all_chans);
+  }
 }
 
 }    // namespace interpolate::bilinear::sse4
