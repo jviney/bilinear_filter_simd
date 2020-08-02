@@ -8,8 +8,11 @@
 
 #include "benchmark/benchmark.h"
 
+#include "interpolate/types.hpp"
+
 struct BenchmarkInput {
-  cv::Mat3b source_image;
+  cv::Mat3b source_image_mat;
+  interpolate::BGRImage source_image;
   cv::Mat2f coords;
   cv::Size2i output_size;
 };

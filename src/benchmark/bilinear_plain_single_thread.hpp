@@ -11,11 +11,12 @@ cv::Mat3b bilinear_plain_single_thread(const BenchmarkInput& input) {
     auto* output_px_row = output_image.ptr<cv::Vec3b>(y);
 
     for (int x = 0; x < output_image.cols; x += 4) {
-      const auto* px_coords = reinterpret_cast<const interpolate::InputCoords*>(px_coords_row + x);
-      auto* output_pixels = reinterpret_cast<interpolate::BGRPixel*>(output_px_row + x);
+      const auto* px_coords = px_coords_row + x;
+      auto* output_pixels = output_px_row + x;
 
-      interpolate::bilinear::plain::interpolate_multiple<4>(input.source_image, output_pixels,
-                                                            px_coords);
+      interpolate::bilinear::plain::interpolate_multiple<4>(
+          input.source_image, reinterpret_cast<interpolate::BGRPixel*>(output_pixels),
+          reinterpret_cast<const interpolate::InputCoords*>(px_coords));
     }
   }
 

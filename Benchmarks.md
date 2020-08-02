@@ -2,8 +2,10 @@
 
 ### 2020-08-02
 
+After introducing `BGRImage` type:
+
 ```
-2020-08-02 00:49:37
+2020-08-02 16:27:20
 Running ./bilinear_filter_simd
 Run on (12 X 4600 MHz CPU s)
 CPU Caches:
@@ -11,16 +13,39 @@ CPU Caches:
   L1 Instruction 32 KiB (x6)
   L2 Unified 256 KiB (x6)
   L3 Unified 12288 KiB (x1)
-Load Average: 5.06, 2.27, 1.05
+Load Average: 1.53, 1.62, 1.10
 ---------------------------------------------------------------------------------
 Benchmark                                       Time             CPU   Iterations
 ---------------------------------------------------------------------------------
-No SIMD - single thread/min_time:2.000       8.09 ms         8.09 ms          345
-No SIMD - multi thread/min_time:2.000        1.85 ms         1.85 ms         1514
-SSE4 - single thread/min_time:2.000          5.98 ms         5.98 ms          467
-SSE4 - multi thread/min_time:2.000           1.58 ms         1.58 ms         1775
-AVX2 - single thread/min_time:2.000          5.17 ms         5.17 ms          535
-AVX2 - multi thread/min_time:2.000           1.37 ms         1.37 ms         2049
+No SIMD - single thread/min_time:2.000       7.59 ms         7.59 ms          369
+No SIMD - multi thread/min_time:2.000        1.68 ms         1.68 ms         1665
+SSE4 - single thread/min_time:2.000          5.88 ms         5.88 ms          473
+SSE4 - multi thread/min_time:2.000           1.47 ms         1.47 ms         1898
+AVX2 - single thread/min_time:2.000          4.64 ms         4.64 ms          601
+AVX2 - multi thread/min_time:2.000           1.35 ms         1.35 ms         2068
+```
+
+Before introducing `BGRImage` type:
+
+```
+2020-08-02 15:33:51
+Running ./bilinear_filter_simd
+Run on (12 X 4600 MHz CPU s)
+CPU Caches:
+  L1 Data 32 KiB (x6)
+  L1 Instruction 32 KiB (x6)
+  L2 Unified 256 KiB (x6)
+  L3 Unified 12288 KiB (x1)
+Load Average: 0.04, 0.09, 0.48
+---------------------------------------------------------------------------------
+Benchmark                                       Time             CPU   Iterations
+---------------------------------------------------------------------------------
+No SIMD - single thread/min_time:2.000       8.12 ms         8.12 ms          346
+No SIMD - multi thread/min_time:2.000        1.72 ms         1.72 ms         1623
+SSE4 - single thread/min_time:5.000          6.18 ms         6.18 ms          453
+SSE4 - multi thread/min_time:2.000           1.50 ms         1.50 ms         1866
+AVX2 - single thread/min_time:2.000          5.29 ms         5.29 ms          528
+AVX2 - multi thread/min_time:2.000           1.36 ms         1.36 ms         2050
 ```
 
 ### 2020-07-18

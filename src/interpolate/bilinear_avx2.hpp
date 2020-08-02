@@ -1,6 +1,5 @@
 #pragma once
 
-#include "common.hpp"
 #include "interpolate/types.hpp"
 #include <immintrin.h>
 
@@ -113,16 +112,15 @@ static const __m128i MASK_SHUFFLE_R0_HALF = _mm_set_epi8(
 static const __m256i MASK_SHUFFLE_R0 = _mm256_set_m128i(MASK_SHUFFLE_R0_HALF, MASK_SHUFFLE_R0_HALF);
 
 // Bilinear interpolation of 2 adjacent output pixels with the supplied coordinates using AVX2.
-static inline void interpolate(const cv::Mat3b& img, const interpolate::InputCoords* input_coords,
+static inline void interpolate(const interpolate::BGRImage& image,
+                               const interpolate::InputCoords* input_coords,
                                interpolate::BGRPixel* output_pixels,
                                bool can_write_third_pixel = false) {
-  const int stride = img.step / 3;
+  const auto* p0_0 = image.ptr(input_coords[0].y, input_coords[0].x);
+  const auto* p1_0 = image.ptr(input_coords[1].y, input_coords[1].x);
 
-  const cv::Vec3b* p0_0 = img.ptr<cv::Vec3b>(input_coords[0].y, input_coords[0].x);
-  const cv::Vec3b* p1_0 = img.ptr<cv::Vec3b>(input_coords[1].y, input_coords[1].x);
-
-  __m256i pixels = _mm256_set_epi64x(*((int64_t*) &p1_0[stride]), *((int64_t*) &p1_0[0]),
-                                     *((int64_t*) &p0_0[stride]), *((int64_t*) &p0_0[0]));
+  __m256i pixels = _mm256_set_epi64x(*((int64_t*) &p1_0[image.stride]), *((int64_t*) &p1_0[0]),
+                                     *((int64_t*) &p0_0[image.stride]), *((int64_t*) &p0_0[0]));
 
   __m256i pixels_bg = _mm256_shuffle_epi8(pixels, MASK_SHUFFLE_BG);
   __m256i pixels_r0 = _mm256_shuffle_epi8(pixels, MASK_SHUFFLE_R0);

@@ -6,7 +6,7 @@
 class InterpolatePlainMultiThread : public cv::ParallelLoopBody
 {
 public:
-  InterpolatePlainMultiThread(const cv::Mat3b& input_image, const cv::Mat2f& coords,
+  InterpolatePlainMultiThread(const interpolate::BGRImage& input_image, const cv::Mat2f& coords,
                               cv::Mat3b& output_image)
       : input_image_(input_image), coords_(coords), output_image_(output_image) {}
 
@@ -27,7 +27,7 @@ public:
   }
 
 private:
-  const cv::Mat3b input_image_;
+  const interpolate::BGRImage& input_image_;
   const cv::Mat2f coords_;
   cv::Mat3b& output_image_;
 };

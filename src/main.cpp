@@ -9,10 +9,17 @@
 
 BenchmarkInput create_benchmark_input() {
   auto benchmark_input = BenchmarkInput();
-  benchmark_input.source_image = cv::imread("../assets/155603.jpg");
+
+  auto source_image = cv::imread("../assets/155603.jpg");
+  benchmark_input.source_image_mat = source_image;
+
+  benchmark_input.source_image = interpolate::BGRImage(
+      source_image.rows, source_image.cols, source_image.step,
+      reinterpret_cast<interpolate::BGRPixel*>(source_image.ptr<cv::Vec3b>(0, 0)));
+
   benchmark_input.output_size = cv::Size2i(1280, 720);
   benchmark_input.coords =
-      sampling_coordinates(benchmark_input.output_size, benchmark_input.source_image.size());
+      sampling_coordinates(benchmark_input.output_size, benchmark_input.source_image_mat.size());
 
   return benchmark_input;
 }

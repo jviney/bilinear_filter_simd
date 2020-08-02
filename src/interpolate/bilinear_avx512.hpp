@@ -1,6 +1,5 @@
 #pragma once
 
-#include "common.hpp"
 #include <immintrin.h>
 
 namespace interpolate::bilinear::avx512

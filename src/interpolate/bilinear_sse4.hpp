@@ -1,6 +1,5 @@
 #pragma once
 
-#include "common.hpp"
 #include <immintrin.h>
 #include "interpolate/types.hpp"
 
@@ -9,7 +8,7 @@ namespace interpolate::bilinear::sse4
 
 // SSE bilinear interpolation implementation based on
 // http://fastcpp.blogspot.com/2011/06/bilinear-pixel-interpolation-using-sse.html
-// and altered to work with OpenCV types and BGR24 image format.
+// and altered to work with BGR24 image format.
 
 static const __m128 ONE = _mm_set1_ps(1.0f);
 static const __m128 TWO_FIFTY_SIX = _mm_set1_ps(256.0f);
@@ -46,11 +45,11 @@ static inline __m128i calc_weights(float x, float y) {
 
 static constexpr uint8_t ZEROED = 128;
 
-static inline void interpolate(const cv::Mat3b& img, const interpolate::InputCoords& input_coords,
+static inline void interpolate(const interpolate::BGRImage& image,
+                               const interpolate::InputCoords& input_coords,
                                interpolate::BGRPixel* output_pixel, bool can_write_next_pixel) {
 
-  const int stride = img.step / 3;
-  const cv::Vec3b* p0 = img.ptr<cv::Vec3b>(input_coords.y, input_coords.x);
+  const auto* p0 = image.ptr(input_coords.y, input_coords.x);
 
   // We are only using the lower 48 bits of each load.
 
@@ -62,7 +61,7 @@ static inline void interpolate(const cv::Mat3b& img, const interpolate::InputCoo
                                               ZEROED, ZEROED, ZEROED, 2, ZEROED, 1, ZEROED, 0));
 
   // _ r g b _ r g b
-  __m128i p34 = _mm_shuffle_epi8(_mm_loadl_epi64((const __m128i*) (p0 + stride)),
+  __m128i p34 = _mm_shuffle_epi8(_mm_loadl_epi64((const __m128i*) (p0 + image.stride)),
                                  _mm_set_epi8(ZEROED, ZEROED, ZEROED, 5, ZEROED, 4, ZEROED, 3,
                                               ZEROED, ZEROED, ZEROED, 2, ZEROED, 1, ZEROED, 0));
 
@@ -91,7 +90,7 @@ static inline void interpolate(const cv::Mat3b& img, const interpolate::InputCoo
   // Convert to 8 bpc
   out = _mm_packus_epi16(out, _mm_setzero_si128());
 
-  // Extract the channels to create a cv::Vec3b
+  // Extract the channels to create a BGRPixel
   int all_chans = _mm_cvtsi128_si32(out);
 
   // Faster to write 4 bytes instead of 3 when allowed
