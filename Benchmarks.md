@@ -2,6 +2,29 @@
 
 ### 2020-08-02
 
+After calculating two weights at once with SSE4 using 16 bit ints:
+
+```
+2020-08-03 00:35:04
+Running ./bilinear_filter_simd
+Run on (12 X 4600 MHz CPU s)
+CPU Caches:
+  L1 Data 32 KiB (x6)
+  L1 Instruction 32 KiB (x6)
+  L2 Unified 256 KiB (x6)
+  L3 Unified 12288 KiB (x1)
+Load Average: 0.49, 0.40, 0.34
+---------------------------------------------------------------------------------
+Benchmark                                       Time             CPU   Iterations
+---------------------------------------------------------------------------------
+No SIMD - single thread/min_time:2.000       7.60 ms         7.60 ms          346
+No SIMD - multi thread/min_time:2.000        1.68 ms         1.68 ms         1657
+SSE4 - single thread/min_time:2.000          5.49 ms         5.49 ms          511
+SSE4 - multi thread/min_time:2.000           1.42 ms         1.42 ms         1972
+AVX2 - single thread/min_time:2.000          4.67 ms         4.67 ms          596
+AVX2 - multi thread/min_time:2.000           1.37 ms         1.37 ms         2049
+```
+
 After introducing `BGRImage` type:
 
 ```

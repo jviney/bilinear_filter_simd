@@ -13,15 +13,15 @@ static cv::Mat3b bilinear_sse4_single_thread(const BenchmarkInput& input) {
     auto* output_row_start = output_image.ptr<cv::Vec3b>(y);
     const auto* px_coords_row = input.coords.ptr<cv::Vec2f>(y);
 
-    for (auto x = 0; x < output_image.cols; x++) {
+    for (auto x = 0; x < output_image.cols; x += 2) {
       const auto* px_coords = px_coords_row + x;
-      auto* output_pixel = output_row_start + x;
+      auto* output_pixels = output_row_start + x;
 
-      auto is_last_output_pixel = (output_pixel == last_output_pixel);
+      auto is_last_output_pixel = (output_pixels + 1 == last_output_pixel);
 
       interpolate::bilinear::sse4::interpolate(
-          input.source_image, *reinterpret_cast<const interpolate::InputCoords*>(px_coords),
-          reinterpret_cast<interpolate::BGRPixel*>(output_pixel), !is_last_output_pixel);
+          input.source_image, reinterpret_cast<const interpolate::InputCoords*>(px_coords),
+          reinterpret_cast<interpolate::BGRPixel*>(output_pixels), !is_last_output_pixel);
     }
   }
 
