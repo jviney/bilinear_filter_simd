@@ -41,10 +41,12 @@ void register_benchmarks(BenchmarkInput& benchmark_input) {
       "No SIMD - single thread", BM_bilinear_plain_single_thread, benchmark_input));
   benchmarks.push_back(benchmark::RegisterBenchmark(
       "No SIMD - multi thread", BM_bilinear_plain_multi_thread, benchmark_input));
+
   benchmarks.push_back(benchmark::RegisterBenchmark(
       "SSE4 - single thread", BM_bilinear_sse4_single_thread, benchmark_input));
   benchmarks.push_back(benchmark::RegisterBenchmark(
       "SSE4 - multi thread", BM_bilinear_sse4_multi_thread, benchmark_input));
+
   benchmarks.push_back(benchmark::RegisterBenchmark(
       "AVX2 - single thread", BM_bilinear_avx2_single_thread, benchmark_input));
   benchmarks.push_back(benchmark::RegisterBenchmark(

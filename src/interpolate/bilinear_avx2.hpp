@@ -1,6 +1,7 @@
 #pragma once
 
 #include "common.hpp"
+#include "interpolate/types.hpp"
 #include <immintrin.h>
 
 namespace interpolate::bilinear::avx2
@@ -21,25 +22,17 @@ static inline __m256i calculate_weights(float x1, float y1, float x2, float y2) 
   __m256 fractional = _mm256_sub_ps(initial, floored);
   __m256 one_minus_fractional = _mm256_sub_ps(ONE, fractional);
 
-  //
-  // x weights
-  //
+  // (1-y) y (1-x) x  |  (1-y) y (1-x) x
+  __m256 combined = _mm256_unpacklo_ps(fractional, one_minus_fractional);
 
   // y (1-y) x (1-x)  |  y (1-y) x (1-x)
-  __m256 x = _mm256_unpacklo_ps(one_minus_fractional, fractional);
-
-  // x (1-x) x (1-x)  |  x (1-x) x (1-x)
-  x = _mm256_shuffle_ps(x, x, 0x44);
-
-  //
-  // y weights
-  //
+  __m256 weights_x = _mm256_shuffle_ps(combined, combined, _MM_SHUFFLE(0, 1, 0, 1));
 
   // y y (1-y) (1-y)  |  y y (1-y) (1-y)
-  __m256 y = _mm256_shuffle_ps(one_minus_fractional, fractional, _MM_SHUFFLE(1, 1, 1, 1));
+  __m256 weights_y = _mm256_shuffle_ps(combined, combined, _MM_SHUFFLE(2, 2, 3, 3));
 
-  // Multiply to get final weight
-  __m256 weights = _mm256_mul_ps(x, y);
+  // Multiply to get final weights
+  __m256 weights = _mm256_mul_ps(weights_x, weights_y);
 
   // Convert to range 0-256
   weights = _mm256_mul_ps(weights, TWO_FIFTY_SIX);
@@ -59,7 +52,8 @@ static inline __m256i calculate_weights(float x1, float y1, float x2, float y2) 
 }
 
 static inline void interpolate_two_pixels(__m256i p_bg, __m256i p_r0, __m256i weights,
-                                          cv::Vec3b* output_pixels, bool can_write_third_pixel) {
+                                          interpolate::BGRPixel* output_pixels,
+                                          bool can_write_third_pixel) {
   // Multiply with the pixel data and sum adjacent pairs to 32 bit ints
   // g g b b | g g b b
   __m256i r_bg = _mm256_madd_epi16(p_bg, weights);
@@ -85,12 +79,12 @@ static inline void interpolate_two_pixels(__m256i p_bg, __m256i p_r0, __m256i we
   // Faster to write 4 bytes instead of three when valid.
   // Always valid for first pixel, because we are about to overwrite the second pixel anyway.
   // Valid for second pixel only if we have been told so.
-  *reinterpret_cast<int32_t*>(output_pixels) = stored[0];
+  memcpy(output_pixels, &stored[0], 4);
 
   if (can_write_third_pixel) {
-    *reinterpret_cast<int32_t*>(output_pixels + 1) = stored[4];
+    memcpy(output_pixels + 1, &stored[4], 4);
   } else {
-    *(output_pixels + 1) = *reinterpret_cast<cv::Vec3b*>(&stored[4]);
+    memcpy(output_pixels + 1, &stored[4], 3);
   }
 }
 
@@ -119,12 +113,13 @@ static const __m128i MASK_SHUFFLE_R0_HALF = _mm_set_epi8(
 static const __m256i MASK_SHUFFLE_R0 = _mm256_set_m128i(MASK_SHUFFLE_R0_HALF, MASK_SHUFFLE_R0_HALF);
 
 // Bilinear interpolation of 2 adjacent output pixels with the supplied coordinates using AVX2.
-static inline void interpolate(const cv::Mat3b& img, float x1, float y1, float x2, float y2,
-                               cv::Vec3b* output_pixels, bool can_write_third_pixel = false) {
+static inline void interpolate(const cv::Mat3b& img, const interpolate::InputCoords* input_coords,
+                               interpolate::BGRPixel* output_pixels,
+                               bool can_write_third_pixel = false) {
   const int stride = img.step / 3;
 
-  const cv::Vec3b* p0_0 = img.ptr<cv::Vec3b>(y1, x1);
-  const cv::Vec3b* p1_0 = img.ptr<cv::Vec3b>(y2, x2);
+  const cv::Vec3b* p0_0 = img.ptr<cv::Vec3b>(input_coords[0].y, input_coords[0].x);
+  const cv::Vec3b* p1_0 = img.ptr<cv::Vec3b>(input_coords[1].y, input_coords[1].x);
 
   __m256i pixels = _mm256_set_epi64x(*((int64_t*) &p1_0[stride]), *((int64_t*) &p1_0[0]),
                                      *((int64_t*) &p0_0[stride]), *((int64_t*) &p0_0[0]));
@@ -132,7 +127,8 @@ static inline void interpolate(const cv::Mat3b& img, float x1, float y1, float x
   __m256i pixels_bg = _mm256_shuffle_epi8(pixels, MASK_SHUFFLE_BG);
   __m256i pixels_r0 = _mm256_shuffle_epi8(pixels, MASK_SHUFFLE_R0);
 
-  __m256i weights = calculate_weights(x1, y1, x2, y2);
+  __m256i weights =
+      calculate_weights(input_coords[0].x, input_coords[0].y, input_coords[1].x, input_coords[1].y);
 
   interpolate_two_pixels(pixels_bg, pixels_r0, weights, output_pixels, can_write_third_pixel);
 }

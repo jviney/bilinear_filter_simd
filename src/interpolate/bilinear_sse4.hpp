@@ -2,6 +2,7 @@
 
 #include "common.hpp"
 #include <immintrin.h>
+#include "interpolate/types.hpp"
 
 namespace interpolate::bilinear::sse4
 {
@@ -14,62 +15,62 @@ static const __m128 ONE = _mm_set1_ps(1.0f);
 static const __m128 TWO_FIFTY_SIX = _mm_set1_ps(256.0f);
 
 // Returns the weightings of the four neighbouring pixels
-static inline __m128 calc_weights(float x, float y) {
-  // 0 0 y x
-  __m128 initial = _mm_unpacklo_ps(_mm_set_ss(x), _mm_set_ss(y));
+static inline __m128i calc_weights(float x, float y) {
+  // _ _ y x
+  const __m128 initial = _mm_set_ps(0, 0, y, x);
 
-  __m128 floored = _mm_floor_ps(initial);
-  __m128 fractional = _mm_sub_ps(initial, floored);
-  __m128 one_minus_fractional = _mm_sub_ps(ONE, fractional);
+  const __m128 floored = _mm_floor_ps(initial);
+  const __m128 fractional = _mm_sub_ps(initial, floored);
+  const __m128 one_minus_fractional = _mm_sub_ps(ONE, fractional);
 
-  // y (1-y) x (1-x)
-  __m128 weights_x = _mm_unpacklo_ps(one_minus_fractional, fractional);
+  // (1-y) y (1-x) x
+  const __m128 combined = _mm_unpacklo_ps(fractional, one_minus_fractional);
 
   // x (1-x) x (1-x)
-  weights_x = _mm_movelh_ps(weights_x, weights_x);
+  const __m128 weights_x = _mm_shuffle_ps(combined, combined, _MM_SHUFFLE(0, 1, 0, 1));
 
   // y y (1-y) (1-y)
-  __m128 weights_y = _mm_shuffle_ps(one_minus_fractional, fractional, _MM_SHUFFLE(1, 1, 1, 1));
+  const __m128 weights_y = _mm_shuffle_ps(combined, combined, _MM_SHUFFLE(2, 2, 3, 3));
 
   // Multiply to get per pixel weightings
   __m128 weights = _mm_mul_ps(weights_x, weights_y);
 
-  return weights;
-}
-
-static inline void interpolate(const cv::Mat3b& img, float x, float y, cv::Vec3b* output_pixel,
-                               bool can_write_next_pixel) {
-  const int stride = img.step / 3;
-  const cv::Vec3b* p0 = img.ptr<cv::Vec3b>(y, x);
-
-  // Load 4 pixels for interpolation
-  __m128i p1 = _mm_loadl_epi64((const __m128i*) &p0[0]);
-  __m128i p2 = _mm_loadl_epi64((const __m128i*) &p0[1]);
-  __m128i p3 = _mm_loadl_epi64((const __m128i*) &p0[stride]);
-  __m128i p4 = _mm_loadl_epi64((const __m128i*) &p0[stride + 1]);
-
-  // Combine pixels 1 and 2, and 3 and 4
-  // _ _ p2 p1
-  __m128i p12 = _mm_unpacklo_epi32(p1, p2);
-  // _ _ p4 p3
-  __m128i p34 = _mm_unpacklo_epi32(p3, p4);
-
-  // Convert to 16 bpc
-  // _ r g b _ r g b
-  p12 = _mm_unpacklo_epi8(p12, _mm_setzero_si128());
-  p34 = _mm_unpacklo_epi8(p34, _mm_setzero_si128());
-
-  __m128 weights = calc_weights(x, y);
-
-  // Convert weights to range 0-256
+  // * 256
   weights = _mm_mul_ps(weights, TWO_FIFTY_SIX);
 
   // Convert weights to 16 bit ints
-  __m128i weight_i = _mm_packs_epi32(_mm_cvtps_epi32(weights), _mm_setzero_si128());
+  const __m128i weights_i = _mm_packs_epi32(_mm_cvtps_epi32(weights), _mm_setzero_si128());
+
+  return weights_i;
+}
+
+static constexpr uint8_t ZEROED = 128;
+
+static inline void interpolate(const cv::Mat3b& img, const interpolate::InputCoords& input_coords,
+                               interpolate::BGRPixel* output_pixel, bool can_write_next_pixel) {
+
+  const int stride = img.step / 3;
+  const cv::Vec3b* p0 = img.ptr<cv::Vec3b>(input_coords.y, input_coords.x);
+
+  // We are only using the lower 48 bits of each load.
+
+  // Load 4 pixels for interpolation.
+  // Shuffle 24bpp around to use 64bpp with to 16 bpc
+  // _ r g b _ r g b
+  __m128i p12 = _mm_shuffle_epi8(_mm_loadl_epi64((const __m128i*) p0),
+                                 _mm_set_epi8(ZEROED, ZEROED, ZEROED, 5, ZEROED, 4, ZEROED, 3,
+                                              ZEROED, ZEROED, ZEROED, 2, ZEROED, 1, ZEROED, 0));
+
+  // _ r g b _ r g b
+  __m128i p34 = _mm_shuffle_epi8(_mm_loadl_epi64((const __m128i*) (p0 + stride)),
+                                 _mm_set_epi8(ZEROED, ZEROED, ZEROED, 5, ZEROED, 4, ZEROED, 3,
+                                              ZEROED, ZEROED, ZEROED, 2, ZEROED, 1, ZEROED, 0));
+
+  __m128i weights = calc_weights(input_coords.x, input_coords.y);
 
   // Prepare weights
-  __m128i w12 = _mm_shufflelo_epi16(weight_i, _MM_SHUFFLE(1, 1, 0, 0));
-  __m128i w34 = _mm_shufflelo_epi16(weight_i, _MM_SHUFFLE(3, 3, 2, 2));
+  __m128i w12 = _mm_shufflelo_epi16(weights, _MM_SHUFFLE(1, 1, 0, 0));
+  __m128i w34 = _mm_shufflelo_epi16(weights, _MM_SHUFFLE(3, 3, 2, 2));
   // w2 w2 w2 w2 w1 w1 w1 w1
   w12 = _mm_unpacklo_epi16(w12, w12);
   // w4 w4 w4 w4 w3 w3 w3 w3
@@ -95,9 +96,9 @@ static inline void interpolate(const cv::Mat3b& img, float x, float y, cv::Vec3b
 
   // Faster to write 4 bytes instead of 3 when allowed
   if (can_write_next_pixel) {
-    *reinterpret_cast<int32_t*>(output_pixel) = all_chans;
+    memcpy(output_pixel, &all_chans, 4);
   } else {
-    *output_pixel = *reinterpret_cast<cv::Vec3b*>(&all_chans);
+    memcpy(output_pixel, &all_chans, sizeof(interpolate::BGRPixel));
   }
 }
 

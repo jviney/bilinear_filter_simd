@@ -6,7 +6,9 @@ add_executable(bilinear_filter_simd
   src/main.cpp
 )
 
-set(CMAKE_BUILD_TYPE Release)
+if (NOT CMAKE_BUILD_TYPE)
+  set(CMAKE_BUILD_TYPE Release)
+endif()
 
 target_include_directories(bilinear_filter_simd PRIVATE src/)
 

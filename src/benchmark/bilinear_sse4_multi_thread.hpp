@@ -14,14 +14,18 @@ public:
     auto* last_output_pixel = output_image_.ptr<cv::Vec3b>(range.end - 1, output_image_.cols - 1);
 
     for (auto y = range.start; y < range.end; y++) {
+      const auto* px_coords_row = coords_.ptr<cv::Vec2f>(y);
+      auto* output_px_row = output_image_.ptr<cv::Vec3b>(y);
+
       for (auto x = 0; x < output_image_.cols; x++) {
-        auto* output_pixel = output_image_.ptr<cv::Vec3b>(y, x);
-        auto& px_coords = coords_(y, x);
+        const auto* px_coords = px_coords_row + x;
+        auto* output_pixel = output_px_row + x;
 
         auto is_last_output_pixel = (output_pixel == last_output_pixel);
 
-        interpolate::bilinear::sse4::interpolate(input_image_, px_coords[1], px_coords[0],
-                                                 output_pixel, !is_last_output_pixel);
+        interpolate::bilinear::sse4::interpolate(
+            input_image_, *reinterpret_cast<const interpolate::InputCoords*>(px_coords),
+            reinterpret_cast<interpolate::BGRPixel*>(output_pixel), !is_last_output_pixel);
       }
     }
   }

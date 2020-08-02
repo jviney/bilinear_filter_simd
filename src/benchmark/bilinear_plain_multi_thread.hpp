@@ -12,12 +12,16 @@ public:
 
   virtual void operator()(const cv::Range& range) const override {
     for (auto y = range.start; y < range.end; y++) {
-      for (auto x = 0; x < output_image_.cols; x++) {
-        auto* output = output_image_.ptr<cv::Vec3b>(y, x);
-        auto& px_coords = coords_(y, x);
+      const auto* px_coords_row = coords_.ptr<cv::Vec2f>(y);
+      auto* output_row = output_image_.ptr<cv::Vec3b>(y);
 
-        *output =
-            interpolate::bilinear::plain::interpolate(input_image_, px_coords[1], px_coords[0]);
+      for (auto x = 0; x < output_image_.cols; x += 4) {
+        const auto* px_coords = px_coords_row + x;
+        auto* output_pixel = output_row + x;
+
+        interpolate::bilinear::plain::interpolate_multiple<4>(
+            input_image_, reinterpret_cast<interpolate::BGRPixel*>(output_pixel),
+            reinterpret_cast<const interpolate::InputCoords*>(px_coords));
       }
     }
   }
