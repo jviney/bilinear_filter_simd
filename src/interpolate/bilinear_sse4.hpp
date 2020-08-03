@@ -42,11 +42,8 @@ static inline __m128i calc_weights(float x1, float y1, float x2, float y2) {
   __m128i weights_y = _mm_shufflelo_epi16(combined, _MM_SHUFFLE(3, 3, 2, 2));
   weights_y = _mm_shufflehi_epi16(weights_y, _MM_SHUFFLE(3, 3, 2, 2));
 
-  // Multiply to get per pixel weightings
-  __m128i weights = _mm_mullo_epi16(weights_x, weights_y);
-
-  // Divide by 256 to get back into correct range
-  weights = _mm_srli_epi16(weights, 8);
+  // Multiply to get per pixel weights. Divide by 256 to get back into correct range.
+  __m128i weights = _mm_srli_epi16(_mm_mullo_epi16(weights_x, weights_y), 8);
 
   // If both weights were 256, the result is 65536 which is all 0s in the lower 16 bits.
   // Find the weights this happened to, and replace them with 256.
@@ -98,11 +95,7 @@ static inline void interpolate_one_pixel(const interpolate::BGRImage& image,
   int all_chans = _mm_cvtsi128_si32(out);
 
   // Faster to write 4 bytes instead of 3 when allowed
-  if (can_write_next_pixel) {
-    memcpy(output_pixel, &all_chans, 4);
-  } else {
-    memcpy(output_pixel, &all_chans, sizeof(interpolate::BGRPixel));
-  }
+  memcpy(output_pixel, &all_chans, can_write_next_pixel ? 4 : 3);
 }
 
 static inline void interpolate(const interpolate::BGRImage& image,

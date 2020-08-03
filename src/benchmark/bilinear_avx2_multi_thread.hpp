@@ -10,13 +10,13 @@ public:
                              cv::Mat3b& output_image)
       : input_image_(input_image), coords_(coords), output_image_(output_image) {
     if (output_image.cols % step != 0) {
-      throw std::runtime_error("output frame width must be multiple of 2");
+      throw std::runtime_error("output frame width must be multiple of 4");
     }
   }
 
   virtual void operator()(const cv::Range& range) const override {
     auto* range_last_output_pixels =
-        output_image_.ptr<cv::Vec3b>(range.end - 1, output_image_.cols - 2);
+        output_image_.ptr<cv::Vec3b>(range.end - 1, output_image_.cols - step);
 
     for (auto y = range.start; y < range.end; y++) {
       auto* px_coords_row = coords_.ptr<cv::Vec2f>(y);
@@ -35,7 +35,7 @@ public:
   }
 
 private:
-  static constexpr auto step = 2;
+  static constexpr auto step = 4;
 
   const interpolate::BGRImage input_image_;
   const cv::Mat2f coords_;

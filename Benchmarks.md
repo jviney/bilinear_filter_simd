@@ -1,5 +1,31 @@
 ## Benchmark Results
 
+### 2020-08-03
+
+After applying same technique to AVX2 and calculating 4 weights at once with 16 bit ints.
+Not much difference.
+
+```
+2020-08-03 21:10:56
+Running ./bilinear_filter_simd
+Run on (12 X 4600 MHz CPU s)
+CPU Caches:
+  L1 Data 32 KiB (x6)
+  L1 Instruction 32 KiB (x6)
+  L2 Unified 256 KiB (x6)
+  L3 Unified 12288 KiB (x1)
+Load Average: 5.54, 2.48, 1.00
+---------------------------------------------------------------------------------
+Benchmark                                       Time             CPU   Iterations
+---------------------------------------------------------------------------------
+No SIMD - single thread/min_time:2.000       7.58 ms         7.58 ms          369
+No SIMD - multi thread/min_time:2.000        1.68 ms         1.68 ms         1661
+SSE4 - single thread/min_time:2.000          5.52 ms         5.52 ms          505
+SSE4 - multi thread/min_time:2.000           1.42 ms         1.42 ms         1947
+AVX2 - single thread/min_time:2.000          4.63 ms         4.63 ms          603
+AVX2 - multi thread/min_time:2.000           1.33 ms         1.33 ms         2110
+```
+
 ### 2020-08-02
 
 After calculating two weights at once with SSE4 using 16 bit ints:
