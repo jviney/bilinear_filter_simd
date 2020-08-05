@@ -21,7 +21,7 @@ set_target_properties(bilinear_filter_simd PROPERTIES CXX_STANDARD 17)
 set_target_properties(bilinear_filter_simd PROPERTIES CXX_STANDARD_REQUIRED ON)
 
 # Target native architecture
-target_compile_options(bilinear_filter_simd PUBLIC -mavx2 -mavx)
+target_compile_options(bilinear_filter_simd PUBLIC -march=native)
 
 # Use OpenCV
 find_package(OpenCV 4 REQUIRED)

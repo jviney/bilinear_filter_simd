@@ -13,34 +13,34 @@ namespace interpolate::bilinear::sse4
 // Calculate the interpolation weights for 2 pixels.
 // Returns weights as 16 bit ints.
 // (px2) w4 w3 w2 w1  (px1) w4 w3 w2 w1
-static inline __m128i calc_weights(float x1, float y1, float x2, float y2) {
-  const __m128 initial = _mm_set_ps(y2, x2, y1, x1);
+static inline __m128i calc_weights(const float sample_coords[4]) {
+  const __m128 initial = _mm_load_ps(sample_coords);
 
   const __m128 floored = _mm_floor_ps(initial);
   const __m128 fractional = _mm_sub_ps(initial, floored);
 
   // Convert fractional parts to 32 bit ints in range 0-256
-  // y2 x2 y1 x1
+  // x2 y2 x1 y1
   __m128i lower = _mm_cvtps_epi32(_mm_mul_ps(fractional, _mm_set1_ps(256.0f)));
 
   // Convert to 16 bit ints
-  // 0 0 0 0   y2 x2 y1 x1
+  // 0 0 0 0   x2 y2 x1 y1
   lower = _mm_packs_epi32(lower, _mm_set1_epi32(0));
 
   // Get the 1-fractional from the 16 bit result
-  // 256 256 256 256   1-y2 1-x2 1-y1 1-x1
+  // 256 256 256 256  1-x2 1-y2 1-x1 1-y1
   const __m128i upper = _mm_sub_epi16(_mm_set1_epi16(256), lower);
 
   // Combine so we have all the parts in one value to shuffle
-  // y2 (1-y2) x2 (1-x2)   y1 (1-y1) x1 (1-x1)
+  // x2 (1-x2) y2 (1-y2)   x1 (1-x1) y1 (1-y1)
   const __m128i combined = _mm_unpacklo_epi16(upper, lower);
 
   // x2 (1-x2) x2 (1-x2)   x1 (1-x1) x1 (1-x1)
-  const __m128i weights_x = _mm_shuffle_epi32(combined, _MM_SHUFFLE(2, 2, 0, 0));
+  const __m128i weights_x = _mm_shuffle_epi32(combined, _MM_SHUFFLE(3, 3, 1, 1));
 
   // y2 y2 (1-y2) (1-y2)   y1 y1 (1-y1) (1-y1)
-  __m128i weights_y = _mm_shufflelo_epi16(combined, _MM_SHUFFLE(3, 3, 2, 2));
-  weights_y = _mm_shufflehi_epi16(weights_y, _MM_SHUFFLE(3, 3, 2, 2));
+  __m128i weights_y = _mm_shufflelo_epi16(combined, _MM_SHUFFLE(1, 1, 0, 0));
+  weights_y = _mm_shufflehi_epi16(weights_y, _MM_SHUFFLE(1, 1, 0, 0));
 
   // Multiply to get per pixel weights. Divide by 256 to get back into correct range.
   __m128i weights = _mm_srli_epi16(_mm_mullo_epi16(weights_x, weights_y), 8);
@@ -103,8 +103,7 @@ static inline void interpolate(const interpolate::BGRImage& image,
                                interpolate::BGRPixel output_pixels[2], bool can_write_next_pixel) {
 
   // Calculate the weights for 2 pixels
-  __m128i weights =
-      calc_weights(input_coords[0].x, input_coords[0].y, input_coords[1].x, input_coords[1].y);
+  __m128i weights = calc_weights(&input_coords[0].y);
 
   // Prepare weights for pixel 1
   __m128i pixel1_w12 = _mm_shufflelo_epi16(weights, _MM_SHUFFLE(1, 1, 0, 0));
