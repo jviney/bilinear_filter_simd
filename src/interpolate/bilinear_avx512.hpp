@@ -5,70 +5,115 @@
 namespace interpolate::bilinear::avx512
 {
 
-static const __m512 ONE = _mm512_set1_ps(1.0f);
-static const __m512 TWO_FIFTY_SIX = _mm512_set1_ps(256.0f);
+//
+// Weights
+//
 
-// Calculate the weights for the 4 surrounding pixels of two independent xy pairs.
-// Returns weights as 16 bit ints.
-// The upper lane contains the weights the the second xy pair, and the lower the first pair.
-// The upper and lower half of each lane are identical.
-// Eg: w4 w3 w2 w1 w4 w3 w2 w1 (second pair)  |  w4 w3 w2 w1 w4 w3 w2 w1 (first pair)
-static inline __m512i calculate_weights(float x1, float y1, float x2, float y2, float x3, float y3,
-                                        float x4, float y4) {
-  __m512 initial = _mm512_set_ps(0, 0, y4, x4, 0, 0, y3, x3, 0, 0, y2, x2, 0, 0, y1, x1);
+static inline __m512i calculate_weights(const float sample_coords[16]) {
+  const __m512 initial = _mm512_load_ps(sample_coords);
 
-  __m512 floored = _mm512_floor_ps(initial);
-  __m512 fractional = _mm512_sub_ps(initial, floored);
-  __m512 one_minus_fractional = _mm512_sub_ps(ONE, fractional);
+  const __m512 floored = _mm512_floor_ps(initial);
+  const __m512 fractional = _mm512_sub_ps(initial, floored);
 
-  //
-  // x weights
-  //
-
-  // Each 128 bit lane: y (1-y) x (1-x)
-  __m512 x = _mm512_unpacklo_ps(one_minus_fractional, fractional);
-
-  // Each 128 bit lane: x (1-x) x (1-x)
-  x = _mm512_shuffle_ps(x, x, 0x44);
-
-  //
-  // y weights
-  //
-
-  // Each 128 bit lane: y y (1-y) (1-y)
-  __m512 y = _mm512_shuffle_ps(one_minus_fractional, fractional, _MM_SHUFFLE(1, 1, 1, 1));
-
-  // Multiply to get final weight
-  __m512 weights = _mm512_mul_ps(x, y);
-
-  // Convert to range 0-256
-  weights = _mm512_mul_ps(weights, TWO_FIFTY_SIX);
-
-  // Convert to 32 bit ints
-  __m512i weights_i = _mm512_cvtps_epi32(weights);
+  // Convert fractional parts to 32 bit ints in range 0-256
+  // ... | x2 y2 x1 y1
+  __m512i lower = _mm512_cvtps_epi32(_mm512_mul_ps(fractional, _mm512_set1_ps(256.0f)));
 
   // Convert to 16 bit ints
-  // Each 128 bit lane: 0 0 0 0 w4 w3 w2 w1
-  weights_i = _mm512_packs_epi32(weights_i, _mm512_setzero_si512());
+  // ... | 0 0 0 0 x2 y2 x1 y1
+  lower = _mm512_packs_epi32(lower, _mm512_set1_epi32(0));
 
-  // Copy lower half of each lane to the upper half
-  // Each 128 bit lane: w4 w3 w2 w1 w4 w3 w2 w1
-  weights_i = _mm512_unpacklo_epi64(weights_i, weights_i);
+  // Subtract each value from 256
+  // ... | 256 256 256 256 1-x2 1-y2 1-x1 1-y1
+  const __m512i upper = _mm512_sub_epi16(_mm512_set1_epi16(256), lower);
 
-  return weights_i;
+  // Combine all the weights into a single vector
+  // ... | 1-y2  1-x1 x1  1-y1 y1
+  const __m512i combined = _mm512_unpacklo_epi16(upper, lower);
+
+  // x weights
+  // ... | ...(1-x2)  x1 (1-x1) x1 (1-x1)
+  __m512i weights_x = _mm512_shuffle_epi32(combined, _MM_PERM_DDBB);
+
+  // y weights
+  // ... | ...(1-y2)  y1 y1 (1-y1) (1-y1)
+  __m512i weights_y = _mm512_shufflelo_epi16(combined, _MM_SHUFFLE(1, 1, 0, 0));
+  weights_y = _mm512_shufflehi_epi16(weights_y, _MM_SHUFFLE(1, 1, 0, 0));
+
+  // Multiply to get final per pixel weights. Divide by 256 to get back into correct range.
+  // ... | ... (x2/y2)  w4 w3 w2 w1 (x1/y1)
+  __m512i weights = _mm512_mullo_epi16(weights_x, weights_y);
+  weights = _mm512_srli_epi16(weights, 8);
+
+  // If both weights were 256, the result is 65536 which is all 0s in the lower 16 bits.
+  // Find the weights this happened to, and replace them with 256.
+  __m512i weights_hi = _mm512_mulhi_epi16(weights_x, weights_y);
+  __mmask32 weights_hi_mask = _mm512_cmpgt_epi16_mask(weights_hi, _mm512_setzero_si512());
+  weights = _mm512_mask_blend_epi16(weights_hi_mask, weights, _mm512_set1_epi16(256));
+
+  return weights;
 }
 
-static inline void interpolate_four_pixels(__m512i p_bg, __m512i p_r0, __m512i weights,
-                                           cv::Vec3b* img_data) {
+// Masks to shuffle initial pixel data from packed 24bpp to 64bpp (16bpc) in each lane.
+// Eg, a 128 bit lane with the following data:
+// (16 other bits) rgb rgb (16 other bits) rgb rgb
+// Becomes:
+// g g g g b b b b
+
+// zeroed, used to extend 8 bit channels to 16 bit
+static constexpr uint8_t Z = 128;
+
+// Blue and green channels.
+#define MASK_SHUFFLE_BG_SINGLE_LANE Z, 12, Z, 9, Z, 4, Z, 1, Z, 11, Z, 8, Z, 3, Z, 0
+static const __m512i MASK_SHUFFLE_BG =
+    _mm512_set_epi8(MASK_SHUFFLE_BG_SINGLE_LANE, MASK_SHUFFLE_BG_SINGLE_LANE,
+                    MASK_SHUFFLE_BG_SINGLE_LANE, MASK_SHUFFLE_BG_SINGLE_LANE);
+
+// Red channel. The upper half of each 128 bit lane is not used.
+#define MASK_SHUFFLE_R0_SINGLE_LANE Z, Z, Z, Z, Z, Z, Z, Z, Z, 13, Z, 10, Z, 5, Z, 2
+static const __m512i MASK_SHUFFLE_R0 =
+    _mm512_set_epi8(MASK_SHUFFLE_R0_SINGLE_LANE, MASK_SHUFFLE_R0_SINGLE_LANE,
+                    MASK_SHUFFLE_R0_SINGLE_LANE, MASK_SHUFFLE_R0_SINGLE_LANE);
+
+//
+// Interpolation
+//
+
+static inline void interpolate_four_pixels(const interpolate::BGRImage& image,
+                                           const interpolate::InputCoords input_coords[7],
+                                           __m512i weights, interpolate::BGRPixel* output_pixels,
+                                           bool first_three_pixels_can_overwrite,
+                                           bool fourth_pixel_can_overwrite) {
+  // Load pixel data
+  const auto* p1 = image.ptr(input_coords[0].y, input_coords[0].x);
+  const auto* p2 = image.ptr(input_coords[2].y, input_coords[2].x);
+  const auto* p3 = image.ptr(input_coords[4].y, input_coords[4].x);
+  const auto* p4 = image.ptr(input_coords[6].y, input_coords[6].x);
+
+  __m512i pixels = _mm512_set_epi64(*((int64_t*) (p4 + image.stride)), *((int64_t*) p4),
+                                    *((int64_t*) (p3 + image.stride)), *((int64_t*) p3),
+                                    *((int64_t*) (p2 + image.stride)), *((int64_t*) p2),
+                                    *((int64_t*) (p1 + image.stride)), *((int64_t*) p1));
+
+  __m512i pixels_bg = _mm512_shuffle_epi8(pixels, MASK_SHUFFLE_BG);
+  __m512i pixels_r0 = _mm512_shuffle_epi8(pixels, MASK_SHUFFLE_R0);
+
   // Multiply with the pixel data and sum adjacent pairs to 32 bit ints
-  // Each 128 bit lane: g g b b
-  __m512i r_bg = _mm512_madd_epi16(p_bg, weights);
-  // Each 128 bit lane: _ _ r r
-  __m512i r_r0 = _mm512_madd_epi16(p_r0, weights);
+  // ... | g g b b
+  __m512i result_bg = _mm512_madd_epi16(pixels_bg, weights);
+  // ... | _ g _ b
+  result_bg = _mm512_add_epi32(result_bg, _mm512_srli_epi64(result_bg, 32));
+  // ... | _ _ g b
+  result_bg = _mm512_shuffle_epi32(result_bg, _MM_PERM_DDCA);
+
+  // ... | _ _ r r
+  __m512i result_r0 = _mm512_madd_epi16(pixels_r0, weights);
+  // ... | _ _ _ r
+  result_r0 = _mm512_add_epi32(result_r0, _mm512_srli_epi64(result_r0, 32));
 
   // Add adjacent pairs again. 32 bpc.
-  // Each 128 bit lane: _ r g b
-  __m512i out = _mm512_hadd_epi32(r_bg, r_r0);
+  // ... | _ r g b
+  __m512i out = _mm512_unpacklo_epi64(result_bg, result_r0);
 
   // Divide by 256 to get back into correct range.
   out = _mm512_srli_epi32(out, 8);
@@ -81,62 +126,27 @@ static inline void interpolate_four_pixels(__m512i p_bg, __m512i p_r0, __m512i w
   int32_t stored[16];
   _mm512_store_si512((__m512i*) stored, out);
 
-  // Write pixel data back to image
-  int32_t pixel_1 = stored[0];
-  memcpy((void*) img_data, &pixel_1, 4);
-
-  int32_t pixel_2 = stored[4];
-  memcpy((void*) img_data, &pixel_2, 4);
-
-  int32_t pixel_3 = stored[8];
-  memcpy((void*) img_data, &pixel_3, 4);
-
-  int32_t pixel_4 = stored[12];
-  *(img_data + 3) = {uint8_t(pixel_4), uint8_t(pixel_4 >> 8), uint8_t(pixel_4 >> 16)};
+  // Write pixel data back to image.
+  // Faster to write 4 bytes instead of three when valid.
+  memcpy(output_pixels, &stored[0], first_three_pixels_can_overwrite ? 4 : 3);
+  memcpy(output_pixels + 2, &stored[4], first_three_pixels_can_overwrite ? 4 : 3);
+  memcpy(output_pixels + 4, &stored[8], first_three_pixels_can_overwrite ? 4 : 3);
+  memcpy(output_pixels + 6, &stored[12], fourth_pixel_can_overwrite ? 4 : 3);
 }
 
-static constexpr uint8_t ZEROED = 128;
+// Bilinear interpolation of 8 adjacent output pixels with the supplied coordinates using AVX512.
+static inline void interpolate(const interpolate::BGRImage& image,
+                               const interpolate::InputCoords input_coords[8],
+                               interpolate::BGRPixel output_pixels[8], bool can_write_ninth_pixel) {
 
-// Mask to shuffle the blue and green channels from packed 24bpp to 64bpp (16bpc) in each lane.
-// Upper and lower lanes of input should contain independent sets of 4 pixels.
-// Eg:
-// (12 other bits) rgb rgb (12 other bits) rgb rgb  |  (12 other bits) rgb rgb (12 other bits) rgb
-// rgb Becomes g g g g b b b b  |  g g g g b b b b
-#define MASK_SHUFFLE_BG_SINGLE \
-  ZEROED, 12, ZEROED, 9, ZEROED, 4, ZEROED, 1, ZEROED, 11, ZEROED, 8, ZEROED, 3, ZEROED, 0
+  const __m512i weights = calculate_weights(&input_coords[0].y);
 
-static const __m512i MASK_SHUFFLE_BG = _mm512_set_epi8(
-    MASK_SHUFFLE_BG_SINGLE, MASK_SHUFFLE_BG_SINGLE, MASK_SHUFFLE_BG_SINGLE, MASK_SHUFFLE_BG_SINGLE);
+  const __m512i weights_1357 = _mm512_unpacklo_epi64(weights, weights);
+  interpolate_four_pixels(image, input_coords, weights_1357, output_pixels, true, true);
 
-// Do the same with the red channel. The upper half of each lane is not used.
-#define MASK_SHUFFLE_R0_SINGLE                                                                    \
-  ZEROED, ZEROED, ZEROED, ZEROED, ZEROED, ZEROED, ZEROED, ZEROED, ZEROED, 13, ZEROED, 10, ZEROED, \
-      5, ZEROED, 2
-
-static const __m512i MASK_SHUFFLE_R0 = _mm512_set_epi8(
-    MASK_SHUFFLE_R0_SINGLE, MASK_SHUFFLE_R0_SINGLE, MASK_SHUFFLE_R0_SINGLE, MASK_SHUFFLE_R0_SINGLE);
-
-// Bilinear interpolation of 4 adjacent output pixels with the supplied coordinates using AVX512.
-static inline void interpolate(const cv::Mat3b& img, float x1, float y1, float x2, float y2,
-                               float x3, float y3, float x4, float y4, cv::Vec3b* out) {
-  const int stride = img.step / 3;
-
-  const cv::Vec3b* p0_0 = img.ptr<cv::Vec3b>(y1, x1);
-  const cv::Vec3b* p1_0 = img.ptr<cv::Vec3b>(y2, x2);
-  const cv::Vec3b* p2_0 = img.ptr<cv::Vec3b>(y3, x3);
-  const cv::Vec3b* p3_0 = img.ptr<cv::Vec3b>(y4, x4);
-
-  __m512i pixels = _mm512_set_epi64(*((int64_t*) &p3_0[stride]), *((int64_t*) &p3_0[0]),
-                                    *((int64_t*) &p2_0[stride]), *((int64_t*) &p2_0[0]),
-                                    *((int64_t*) &p1_0[stride]), *((int64_t*) &p1_0[0]),
-                                    *((int64_t*) &p0_0[stride]), *((int64_t*) &p0_0[0]));
-
-  __m512i pixels_bg = _mm512_shuffle_epi8(pixels, MASK_SHUFFLE_BG);
-  __m512i pixels_r0 = _mm512_shuffle_epi8(pixels, MASK_SHUFFLE_R0);
-
-  __m512i weights = calculate_weights(x1, y1, x2, y2);
-
-  interpolate_four_pixels(pixels_bg, pixels_r0, weights, out);
+  const __m512i weights_2468 = _mm512_unpackhi_epi64(weights, weights);
+  interpolate_four_pixels(image, input_coords + 1, weights_2468, output_pixels + 1, false,
+                          can_write_ninth_pixel);
 }
 
 }    // namespace interpolate::bilinear::avx512

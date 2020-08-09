@@ -1,12 +1,12 @@
 #pragma once
 
 #include "common.hpp"
-#include "interpolate/bilinear_avx2.hpp"
+#include "interpolate/bilinear_avx512.hpp"
 
-cv::Mat3b bilinear_avx2_single_thread(const BenchmarkInput& input) {
+cv::Mat3b bilinear_avx512_single_thread(const BenchmarkInput& input) {
   auto output_image = cv::Mat3b(input.output_size);
 
-  static constexpr auto step = 4;
+  static constexpr auto step = 8;
 
   auto* last_output_pixels =
       output_image.ptr<cv::Vec3b>(output_image.rows - 1, output_image.cols - step);
@@ -21,7 +21,7 @@ cv::Mat3b bilinear_avx2_single_thread(const BenchmarkInput& input) {
 
       auto is_last_output_pixels = (output_pixels + step - 1 == last_output_pixels);
 
-      interpolate::bilinear::avx2::interpolate(
+      interpolate::bilinear::avx512::interpolate(
           input.source_image, reinterpret_cast<const interpolate::InputCoords*>(px_coords),
           reinterpret_cast<interpolate::BGRPixel*>(output_pixels), !is_last_output_pixels);
     }
@@ -30,8 +30,8 @@ cv::Mat3b bilinear_avx2_single_thread(const BenchmarkInput& input) {
   return output_image;
 }
 
-static void BM_bilinear_avx2_single_thread(benchmark::State& state, const BenchmarkInput& input) {
+static void BM_bilinear_avx512_single_thread(benchmark::State& state, const BenchmarkInput& input) {
   for (auto _ : state) {
-    bilinear_avx2_single_thread(input);
+    bilinear_avx512_single_thread(input);
   }
 }

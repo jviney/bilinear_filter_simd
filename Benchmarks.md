@@ -1,5 +1,35 @@
 ## Benchmark Results
 
+### 2020-08-09
+
+Implemented AVX512. Benchmarks from a c5.4xlarge EC2 instance.
+
+```
+Input image size: 3840x2160
+Output image size: 1280x720
+OpenCV: numberOfCPUS=16 getNumThreads=16
+2020-08-09 11:34:16
+Running ./bilinear_filter_simd
+Run on (16 X 3400.97 MHz CPU s)
+CPU Caches:
+  L1 Data 32 KiB (x8)
+  L1 Instruction 32 KiB (x8)
+  L2 Unified 1024 KiB (x8)
+  L3 Unified 25344 KiB (x1)
+Load Average: 0.00, 0.04, 0.13
+---------------------------------------------------------------------------------
+Benchmark                                       Time             CPU   Iterations
+---------------------------------------------------------------------------------
+No SIMD - single thread/min_time:2.000       13.3 ms         13.3 ms          215
+No SIMD - multi thread/min_time:2.000        1.25 ms         1.25 ms         2227
+SSE4 - single thread/min_time:2.000          10.7 ms         10.7 ms          267
+SSE4 - multi thread/min_time:2.000          0.987 ms        0.986 ms         2856
+AVX2 - single thread/min_time:2.000          8.14 ms         8.14 ms          360
+AVX2 - multi thread/min_time:2.000          0.868 ms        0.868 ms         3253
+AVX512 - single thread/min_time:2.000        7.33 ms         7.33 ms          373
+AVX512 - multi thread/min_time:2.000        0.822 ms        0.822 ms         3430
+```
+
 ### 2020-08-05
 
 After optimising data loading for weight calculation in SSE4/AVX2 implementations.

@@ -7,6 +7,11 @@
 #include "benchmark/bilinear_avx2_single_thread.hpp"
 #include "benchmark/bilinear_avx2_multi_thread.hpp"
 
+#ifdef __AVX512F__
+#include "benchmark/bilinear_avx512_single_thread.hpp"
+#include "benchmark/bilinear_avx512_multi_thread.hpp"
+#endif
+
 BenchmarkInput create_benchmark_input() {
   auto benchmark_input = BenchmarkInput();
 
@@ -39,6 +44,12 @@ void validate_implementations(BenchmarkInput& benchmark_input) {
   compare_mats(gold_standard, "sse4 multi thread", bilinear_sse4_multi_thread(benchmark_input));
   compare_mats(gold_standard, "avx2 single thread", bilinear_avx2_single_thread(benchmark_input));
   compare_mats(gold_standard, "avx2 multi thread", bilinear_avx2_multi_thread(benchmark_input));
+
+#ifdef __AVX512F__
+  compare_mats(gold_standard, "avx512 single thread",
+               bilinear_avx512_single_thread(benchmark_input));
+  compare_mats(gold_standard, "avx512 multi thread", bilinear_avx512_multi_thread(benchmark_input));
+#endif
 }
 
 void register_benchmarks(BenchmarkInput& benchmark_input) {
@@ -58,6 +69,13 @@ void register_benchmarks(BenchmarkInput& benchmark_input) {
       "AVX2 - single thread", BM_bilinear_avx2_single_thread, benchmark_input));
   benchmarks.push_back(benchmark::RegisterBenchmark(
       "AVX2 - multi thread", BM_bilinear_avx2_multi_thread, benchmark_input));
+
+#ifdef __AVX512F__
+  benchmarks.push_back(benchmark::RegisterBenchmark(
+      "AVX512 - single thread", BM_bilinear_avx512_single_thread, benchmark_input));
+  benchmarks.push_back(benchmark::RegisterBenchmark(
+      "AVX512 - multi thread", BM_bilinear_avx512_multi_thread, benchmark_input));
+#endif
 
   for (auto bm : benchmarks) {
     bm->Unit(benchmark::kMillisecond);
