@@ -71,6 +71,12 @@ int main(int argc, char** argv) {
   validate_implementations(benchmark_input);
   register_benchmarks(benchmark_input);
 
+  printf("Input image size: %dx%d\n", benchmark_input.source_image.cols,
+         benchmark_input.source_image.rows);
+  printf("Output image size: %dx%d\n", benchmark_input.output_size.width,
+         benchmark_input.output_size.height);
+  printf("OpenCV: numberOfCPUS=%d getNumThreads=%d\n", cv::getNumberOfCPUs(), cv::getNumThreads());
+
   benchmark::Initialize(&argc, argv);
   benchmark::RunSpecifiedBenchmarks();
 }
