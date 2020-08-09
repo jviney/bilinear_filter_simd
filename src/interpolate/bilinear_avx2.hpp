@@ -6,14 +6,16 @@
 namespace interpolate::bilinear::avx2
 {
 
-static const __m256 ONE = _mm256_set1_ps(1.0f);
-static const __m256 TWO_FIFTY_SIX = _mm256_set1_ps(256.0f);
-
 // Calculate the weights for the 4 surrounding pixels of 4 independent xy pairs.
 // Returns weights as 16 bit ints.
 // Eg: w4 w3 w2 w1 (x4/y4)   w4 w3 w2 w1 (x3/y3)   |  w4 w3 w2 w1 (x2/y2)  w4 w3 w2 w1 (x1/y1)
 static inline __m256i calculate_weights(const float sample_coords[8]) {
-  const __m256 initial = _mm256_load_ps(sample_coords);
+  // x4 y4 x3 y3  |  x2 y2 x1 y1
+  __m256 initial = _mm256_load_ps(sample_coords);
+
+  // Swap coords for pixels 2 and 3
+  // x4 y4 x2 y2  |  x3 y3 x1 y1
+  initial = _mm256_permutevar8x32_ps(initial, _mm256_set_epi32(7, 6, 3, 2, 5, 4, 1, 0));
 
   const __m256 floored = _mm256_floor_ps(initial);
   const __m256 fractional = _mm256_sub_ps(initial, floored);
@@ -79,12 +81,10 @@ static const __m256i MASK_SHUFFLE_R0 = _mm256_set_m128i(MASK_SHUFFLE_R0_HALF, MA
 
 static inline void interpolate_two_pixels(const interpolate::BGRImage& image,
                                           const interpolate::InputCoords input_coords[3],
-                                          __m256i weights, interpolate::BGRPixel* output_pixels,
-                                          bool first_pixel_can_overwrite,
-                                          bool second_pixel_can_overwrite) {
+                                          __m256i weights, interpolate::BGRPixel* output_pixels) {
   // Load pixel data
   const auto* p0_0 = image.ptr(input_coords[0].y, input_coords[0].x);
-  const auto* p1_0 = image.ptr(input_coords[2].y, input_coords[2].x);
+  const auto* p1_0 = image.ptr(input_coords[1].y, input_coords[1].x);
 
   __m256i pixels = _mm256_set_epi64x(*((int64_t*) (p1_0 + image.stride)), *((int64_t*) p1_0),
                                      *((int64_t*) (p0_0 + image.stride)), *((int64_t*) p0_0));
@@ -109,16 +109,75 @@ static inline void interpolate_two_pixels(const interpolate::BGRImage& image,
   out = _mm256_packus_epi32(out, _mm256_setzero_si256());
   out = _mm256_packus_epi16(out, _mm256_setzero_si256());
 
+  // Move second pixel result into lower lane
+  out = _mm256_permutevar8x32_epi32(out, _mm256_set_epi32(0, 0, 0, 0, 0, 0, 4, 0));
+
+  // Shuffle so data for two pixels is continuous
+  out = _mm256_shuffle_epi8(
+      out,
+      _mm256_set_m128i(_mm_setzero_si128(),
+                       _mm_set_epi8(ZEROED, ZEROED, ZEROED, ZEROED, ZEROED, ZEROED, ZEROED, ZEROED,
+                                    ZEROED, ZEROED,    // don't care about these
+                                    6, 5, 4, 2, 1, 0)));
+
   // Store pixel data
   int32_t stored[8];
   _mm256_store_si256((__m256i*) stored, out);
 
   // Write pixel data back to image.
   // Faster to write 4 bytes instead of three when valid.
-  // Always valid for first pixel, because we are about to overwrite the second pixel anyway.
-  // Valid for second pixel only if we have been told so.
-  memcpy(output_pixels, &stored[0], first_pixel_can_overwrite ? 4 : 3);
-  memcpy(output_pixels + 2, &stored[4], second_pixel_can_overwrite ? 4 : 3);
+  memcpy(output_pixels, stored, 8);
+}
+
+static inline void interpolate_two_pixels(const interpolate::BGRImage& image,
+                                          const interpolate::InputCoords input_coords[3],
+                                          __m256i weights, interpolate::BGRPixel* output_pixels,
+                                          bool can_overwrite_third_pixel) {
+  // Load pixel data
+  const auto* p0_0 = image.ptr(input_coords[0].y, input_coords[0].x);
+  const auto* p1_0 = image.ptr(input_coords[1].y, input_coords[1].x);
+
+  __m256i pixels = _mm256_set_epi64x(*((int64_t*) (p1_0 + image.stride)), *((int64_t*) p1_0),
+                                     *((int64_t*) (p0_0 + image.stride)), *((int64_t*) p0_0));
+
+  __m256i pixels_bg = _mm256_shuffle_epi8(pixels, MASK_SHUFFLE_BG);
+  __m256i pixels_r0 = _mm256_shuffle_epi8(pixels, MASK_SHUFFLE_R0);
+
+  // Multiply with the pixel data and sum adjacent pairs to 32 bit ints
+  // g g b b | g g b b
+  __m256i result_bg = _mm256_madd_epi16(pixels_bg, weights);
+  // _ _ r r | _ _ r r
+  __m256i result_r0 = _mm256_madd_epi16(pixels_r0, weights);
+
+  // Add adjacent pairs again. 32 bpc.
+  // _ r g b  |  _ r g b
+  __m256i out = _mm256_hadd_epi32(result_bg, result_r0);
+
+  // Divide by 256 to get back into correct range.
+  out = _mm256_srli_epi32(out, 8);
+
+  // Convert from 32bpc => 16bpc => 8bpc
+  out = _mm256_packus_epi32(out, _mm256_setzero_si256());
+  out = _mm256_packus_epi16(out, _mm256_setzero_si256());
+
+  // Move second pixel result into lower lane
+  out = _mm256_permutevar8x32_epi32(out, _mm256_set_epi32(0, 0, 0, 0, 0, 0, 4, 0));
+
+  // Shuffle so data for two pixels is continuous
+  out = _mm256_shuffle_epi8(
+      out,
+      _mm256_set_m128i(_mm_setzero_si128(),
+                       _mm_set_epi8(ZEROED, ZEROED, ZEROED, ZEROED, ZEROED, ZEROED, ZEROED, ZEROED,
+                                    ZEROED, ZEROED,    // don't care about these
+                                    6, 5, 4, 2, 1, 0)));
+
+  // Store pixel data
+  int32_t stored[8];
+  _mm256_store_si256((__m256i*) stored, out);
+
+  // Write pixel data back to image.
+  // Faster to write 4 bytes instead of three when valid.
+  memcpy(output_pixels, stored, can_overwrite_third_pixel ? 8 : 6);
 }
 
 // Bilinear interpolation of 4 adjacent output pixels with the supplied coordinates using AVX2.
@@ -129,12 +188,12 @@ static inline void interpolate(const interpolate::BGRImage& image,
   const __m256i weights = calculate_weights(&input_coords[0].y);
 
   // Prepare weights for pixels 1 and 3, and interpolate
-  const __m256i weights_13 = _mm256_unpacklo_epi64(weights, weights);
-  interpolate_two_pixels(image, input_coords, weights_13, output_pixels, true, true);
+  const __m256i weights_12 = _mm256_unpacklo_epi64(weights, weights);
+  interpolate_two_pixels(image, input_coords, weights_12, output_pixels);
 
   // Same for pixels 2 and 4
-  const __m256i weights_24 = _mm256_unpackhi_epi64(weights, weights);
-  interpolate_two_pixels(image, input_coords + 1, weights_24, output_pixels + 1, false,
+  const __m256i weights_34 = _mm256_unpackhi_epi64(weights, weights);
+  interpolate_two_pixels(image, input_coords + 2, weights_34, output_pixels + 2,
                          can_write_fifth_pixel);
 }
 
