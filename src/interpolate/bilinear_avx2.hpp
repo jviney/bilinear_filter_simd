@@ -113,6 +113,12 @@ static inline __m256i interpolate_two_pixels(const interpolate::BGRImage& image,
   return result;
 }
 
+// Slightly faster than memcpy
+static inline void memcpy_12(uint8_t* dst, const uint8_t* src) {
+  *((uint64_t*) dst) = *((uint64_t*) src);
+  *((uint32_t*) (dst + 8)) = *((uint32_t*) (src + 8));
+}
+
 static inline void write_output_pixels(__m256i pixels_13, __m256i pixels_24,
                                        interpolate::BGRPixel output_pixels[4]) {
   // Unpack to get adjacent pixel data in lower 64 bits of each lane
@@ -136,7 +142,7 @@ static inline void write_output_pixels(__m256i pixels_13, __m256i pixels_24,
   // Write out the lower 12 bytes
   uint8_t interpolated_pixels[32];
   _mm256_store_si256((__m256i*) interpolated_pixels, combined);
-  memcpy(output_pixels, interpolated_pixels, 12);
+  memcpy_12((uint8_t*) output_pixels, interpolated_pixels);
 }
 
 // Bilinear interpolation of 4 adjacent output pixels with the supplied coordinates using AVX2.
