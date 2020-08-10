@@ -10,6 +10,9 @@ namespace interpolate::bilinear::sse4
 // http://fastcpp.blogspot.com/2011/06/bilinear-pixel-interpolation-using-sse.html
 // and altered to work with BGR24 image format.
 
+static const __m128i WEIGHTS_Y_SHUFFLE =
+    _mm_set_epi8(11, 10, 11, 10, 9, 8, 9, 8, 3, 2, 3, 2, 1, 0, 1, 0);
+
 // Calculate the interpolation weights for 2 pixels.
 // Returns weights as 16 bit ints.
 // (px2) w4 w3 w2 w1  (px1) w4 w3 w2 w1
@@ -39,8 +42,8 @@ static inline __m128i calc_weights(const float sample_coords[4]) {
   const __m128i weights_x = _mm_shuffle_epi32(combined, _MM_SHUFFLE(3, 3, 1, 1));
 
   // y2 y2 (1-y2) (1-y2)   y1 y1 (1-y1) (1-y1)
-  __m128i weights_y = _mm_shufflelo_epi16(combined, _MM_SHUFFLE(1, 1, 0, 0));
-  weights_y = _mm_shufflehi_epi16(weights_y, _MM_SHUFFLE(1, 1, 0, 0));
+  // Shuffle 16 bit numbers as 8 bits because there is no _mm256_shuffle_epi16
+  __m128i weights_y = _mm_shuffle_epi8(combined, WEIGHTS_Y_SHUFFLE);
 
   // Multiply to get per pixel weights. Divide by 256 to get back into correct range.
   __m128i weights = _mm_srli_epi16(_mm_mullo_epi16(weights_x, weights_y), 8);

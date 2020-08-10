@@ -6,8 +6,10 @@
 namespace interpolate::bilinear::avx2
 {
 
-static const __m256 ONE = _mm256_set1_ps(1.0f);
-static const __m256 TWO_FIFTY_SIX = _mm256_set1_ps(256.0f);
+static const __m256i WEIGHTS_Y_SHUFFLE =
+    _mm256_set_epi8(11, 10, 11, 10, 9, 8, 9, 8, 3, 2, 3, 2, 1, 0, 1, 0,
+                    // Repeated
+                    11, 10, 11, 10, 9, 8, 9, 8, 3, 2, 3, 2, 1, 0, 1, 0);
 
 // Calculate the weights for the 4 surrounding pixels of 4 independent xy pairs.
 // Returns weights as 16 bit ints.
@@ -38,8 +40,8 @@ static inline __m256i calculate_weights(const float sample_coords[8]) {
   const __m256i weights_x = _mm256_shuffle_epi32(combined, _MM_SHUFFLE(3, 3, 1, 1));
 
   // ...(1-y4)  ...(1-y3)  |  ...(1-y2)  y1 y1 (1-y1) (1-y1)
-  __m256i weights_y = _mm256_shufflelo_epi16(combined, _MM_SHUFFLE(1, 1, 0, 0));
-  weights_y = _mm256_shufflehi_epi16(weights_y, _MM_SHUFFLE(1, 1, 0, 0));
+  // Shuffle 16 bit numbers as 8 bits because there is no _mm256_shuffle_epi16
+  const __m256i weights_y = _mm256_shuffle_epi8(combined, WEIGHTS_Y_SHUFFLE);
 
   // Multiply to get final per pixel weights. Divide by 256 to get back into correct range.
   // ...(x4/y4)  ... (x3/y3)  |  ... (x2/y2)  w4 w3 w2 w1 (x1/y1)

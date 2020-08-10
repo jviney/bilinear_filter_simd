@@ -2,6 +2,28 @@
 
 ### 2020-08-10
 
+One less instruction to compute weights for SSE4 and AVX2.
+
+```
+Input image size: 3840x2160
+Output image size: 1280x720
+OpenCV: numberOfCPUS=12 getNumThreads=12
+2020-08-10 23:10:15
+Running ./bilinear_filter_simd
+Run on (12 X 4600 MHz CPU s)
+CPU Caches:
+  L1 Data 32 KiB (x6)
+  L1 Instruction 32 KiB (x6)
+  L2 Unified 256 KiB (x6)
+  L3 Unified 12288 KiB (x1)
+Load Average: 0.45, 0.25, 0.20
+------------------------------------------------------------------------------
+Benchmark                                    Time             CPU   Iterations
+------------------------------------------------------------------------------
+SSE4 - single thread/min_time:2.000       4.97 ms         4.97 ms          555
+AVX2 - single thread/min_time:2.000       4.05 ms         4.05 ms          691
+```
+
 Combined storage of output pixels into a single memcpy for SSE4 and AVX2.
 
 ```
