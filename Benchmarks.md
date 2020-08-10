@@ -1,5 +1,33 @@
 ## Benchmark Results
 
+### 2020-08-10
+
+Combined storage of output pixels into a single memcpy for SSE4 and AVX2.
+
+```
+Input image size: 3840x2160
+Output image size: 1280x720
+OpenCV: numberOfCPUS=12 getNumThreads=12
+2020-08-10 22:20:51
+Running ./bilinear_filter_simd
+Run on (12 X 4600 MHz CPU s)
+CPU Caches:
+  L1 Data 32 KiB (x6)
+  L1 Instruction 32 KiB (x6)
+  L2 Unified 256 KiB (x6)
+  L3 Unified 12288 KiB (x1)
+Load Average: 3.25, 2.08, 1.04
+---------------------------------------------------------------------------------
+Benchmark                                       Time             CPU   Iterations
+---------------------------------------------------------------------------------
+No SIMD - single thread/min_time:2.000       7.58 ms         7.58 ms          371
+No SIMD - multi thread/min_time:2.000        1.66 ms         1.64 ms         1696
+SSE4 - single thread/min_time:2.000          5.01 ms         5.01 ms          555
+SSE4 - multi thread/min_time:2.000           1.37 ms         1.37 ms         2056
+AVX2 - single thread/min_time:2.000          4.07 ms         4.07 ms          689
+AVX2 - multi thread/min_time:2.000           1.33 ms         1.33 ms         2098
+```
+
 ### 2020-08-09
 
 Implemented AVX512. Benchmarks from a c5.4xlarge EC2 instance.

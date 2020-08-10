@@ -14,7 +14,7 @@ namespace interpolate::bilinear::sse4
 // Returns weights as 16 bit ints.
 // (px2) w4 w3 w2 w1  (px1) w4 w3 w2 w1
 static inline __m128i calc_weights(const float sample_coords[4]) {
-  const __m128 initial = _mm_load_ps(sample_coords);
+  const __m128 initial = _mm_castsi128_ps(_mm_stream_load_si128((__m128i*) sample_coords));
 
   const __m128 floored = _mm_floor_ps(initial);
   const __m128 fractional = _mm_sub_ps(initial, floored);
@@ -56,10 +56,9 @@ static inline __m128i calc_weights(const float sample_coords[4]) {
 
 static constexpr uint8_t ZEROED = 128;
 
-static inline void interpolate_one_pixel(const interpolate::BGRImage& image,
-                                         const interpolate::InputCoords& input_coords, __m128i w12,
-                                         __m128i w34, interpolate::BGRPixel* output_pixel,
-                                         bool can_write_next_pixel) {
+static inline __m128i interpolate_one_pixel(const interpolate::BGRImage& image,
+                                            const interpolate::InputCoords& input_coords,
+                                            __m128i w12, __m128i w34) {
 
   const auto* p0 = image.ptr(input_coords.y, input_coords.x);
 
@@ -77,8 +76,8 @@ static inline void interpolate_one_pixel(const interpolate::BGRImage& image,
                                               ZEROED, ZEROED, ZEROED, 2, ZEROED, 1, ZEROED, 0));
 
   // Multiply each pixel with its weight
-  __m128i out_12 = _mm_mullo_epi16(p12, w12);
-  __m128i out_34 = _mm_mullo_epi16(p34, w34);
+  const __m128i out_12 = _mm_mullo_epi16(p12, w12);
+  const __m128i out_34 = _mm_mullo_epi16(p34, w34);
 
   // Sum the results
   __m128i out_1234 = _mm_add_epi16(out_12, out_34);
@@ -91,16 +90,32 @@ static inline void interpolate_one_pixel(const interpolate::BGRImage& image,
   // Convert to 8bpc
   out = _mm_packus_epi16(out, _mm_setzero_si128());
 
-  // Extract the channels to create a BGRPixel
-  int all_chans = _mm_cvtsi128_si32(out);
+  return out;
+}
 
-  // Faster to write 4 bytes instead of 3 when allowed
-  memcpy(output_pixel, &all_chans, can_write_next_pixel ? 4 : 3);
+static inline void write_output_pixels(__m128i pixel_1, __m128i pixel_2,
+                                       interpolate::BGRPixel output_pixels[2],
+                                       bool can_write_third_pixel) {
+  // _ _ 2 1
+  __m128i combined = _mm_unpacklo_epi32(pixel_1, pixel_2);
+
+  // Shuffle to pack 2 pixels into lower 48 bits
+  combined = _mm_shuffle_epi8(combined,
+                              _mm_set_epi8(
+                                  // Upper 80 bits not used
+                                  ZEROED, ZEROED, ZEROED, ZEROED, ZEROED, ZEROED, ZEROED, ZEROED,
+                                  ZEROED, ZEROED,
+                                  // Packed pixel data
+                                  6, 5, 4, 2, 1, 0));
+
+  // Write the pixel data. Faster to write 8 bytes when allowed.
+  uint64_t interpolated_pixels = _mm_cvtsi128_si64(combined);
+  memcpy(output_pixels, &interpolated_pixels, can_write_third_pixel ? 8 : 6);
 }
 
 static inline void interpolate(const interpolate::BGRImage& image,
                                const interpolate::InputCoords input_coords[2],
-                               interpolate::BGRPixel output_pixels[2], bool can_write_next_pixel) {
+                               interpolate::BGRPixel output_pixels[2], bool can_write_third_pixel) {
 
   // Calculate the weights for 2 pixels
   __m128i weights = calc_weights(&input_coords[0].y);
@@ -121,9 +136,10 @@ static inline void interpolate(const interpolate::BGRImage& image,
   // w4 w4 w4 w4 w3 w3 w3 w3
   pixel2_w34 = _mm_unpackhi_epi16(pixel2_w34, pixel2_w34);
 
-  interpolate_one_pixel(image, input_coords[0], pixel1_w12, pixel1_w34, output_pixels, true);
-  interpolate_one_pixel(image, input_coords[1], pixel2_w12, pixel2_w34, output_pixels + 1,
-                        can_write_next_pixel);
+  const __m128i pixel_1 = interpolate_one_pixel(image, input_coords[0], pixel1_w12, pixel1_w34);
+  const __m128i pixel_2 = interpolate_one_pixel(image, input_coords[1], pixel2_w12, pixel2_w34);
+
+  write_output_pixels(pixel_1, pixel_2, output_pixels, can_write_third_pixel);
 }
 
 }    // namespace interpolate::bilinear::sse4
