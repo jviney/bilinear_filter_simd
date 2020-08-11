@@ -2,6 +2,7 @@
 
 #include "interpolate/types.hpp"
 #include <immintrin.h>
+#include "interpolate/debug.hpp"
 
 namespace interpolate::bilinear::avx2
 {
@@ -94,21 +95,39 @@ static inline __m256i interpolate_two_pixels(const interpolate::BGRImage& image,
   const __m256i pixels_r0 = _mm256_shuffle_epi8(pixels, MASK_SHUFFLE_R0);
 
   // Multiply with the pixel data and sum adjacent pairs to 32 bit ints
-  // g g b b | g g b b
-  const __m256i result_bg = _mm256_madd_epi16(pixels_bg, weights);
-  // _ _ r r | _ _ r r
-  const __m256i result_r0 = _mm256_madd_epi16(pixels_r0, weights);
+  // ... | g g g g b b b b
+  __m256i bg = _mm256_mullo_epi16(pixels_bg, weights);
+  __m256i r0 = _mm256_mullo_epi16(pixels_r0, weights);
 
-  // Add adjacent pairs again. 32 bpc.
-  // _ r g b  |  _ r g b
-  __m256i result = _mm256_hadd_epi32(result_bg, result_r0);
+  // Shift right and add
+  __m256i bg_shifted = _mm256_srli_epi32(bg, 16);
+  bg = _mm256_add_epi16(bg, bg_shifted);
 
-  // Divide by 256 to get back into correct range.
-  result = _mm256_srli_epi32(result, 8);
+  __m256i r0_shifted = _mm256_srli_epi32(r0, 16);
+  r0 = _mm256_add_epi16(r0, r0_shifted);
 
-  // Convert from 32bpc => 16bpc => 8bpc
-  result = _mm256_packus_epi32(result, _mm256_setzero_si256());
-  result = _mm256_packus_epi16(result, _mm256_setzero_si256());
+  // Shuffle so pixel data is in lower 64 bits
+  const __m256i shuffle_mask = _mm256_set_epi8(Z, Z, Z, Z, Z, Z, Z, Z, 13, 12, 9, 8, 5, 4, 1, 0,
+                                               // repeated
+                                               Z, Z, Z, Z, Z, Z, Z, Z, 13, 12, 9, 8, 5, 4, 1, 0);
+  bg = _mm256_shuffle_epi8(bg, shuffle_mask);
+  r0 = _mm256_shuffle_epi8(r0, shuffle_mask);
+
+  // Combine channels
+  __m256i bgr0 = _mm256_unpacklo_epi64(bg, r0);
+
+  // Shift over and perform final add
+  const __m256i bgr0_shifted = _mm256_srli_epi32(bgr0, 16);
+  bgr0 = _mm256_add_epi16(bgr0, bgr0_shifted);
+
+  // Divide by 256 to get back into correct range
+  __m256i result = _mm256_srli_epi16(bgr0, 8);
+
+  // Shuffle so the bgr are adjacent
+  result = _mm256_shuffle_epi8(result,
+                               _mm256_set_epi8(Z, Z, Z, Z, Z, Z, Z, Z, Z, Z, Z, Z, Z, 8, 4, 0,
+                                               // repeated
+                                               Z, Z, Z, Z, Z, Z, Z, Z, Z, Z, Z, Z, Z, 8, 4, 0));
 
   return result;
 }
