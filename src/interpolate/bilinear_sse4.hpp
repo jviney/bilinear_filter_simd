@@ -57,8 +57,6 @@ static inline __m128i calc_weights(const float sample_coords[4]) {
   return weights;
 }
 
-static constexpr uint8_t ZEROED = 128;
-
 static inline __m128i interpolate_one_pixel(const interpolate::BGRImage& image,
                                             const interpolate::InputCoords& input_coords,
                                             __m128i w12, __m128i w34) {
@@ -69,14 +67,14 @@ static inline __m128i interpolate_one_pixel(const interpolate::BGRImage& image,
   // We are only using the lower 48 bits of each load.
   // Shuffle 24bpp around to use 64bpp with 16bpc
   // _ r g b _ r g b
-  __m128i p12 = _mm_shuffle_epi8(_mm_loadl_epi64((const __m128i*) p0),
-                                 _mm_set_epi8(ZEROED, ZEROED, ZEROED, 5, ZEROED, 4, ZEROED, 3,
-                                              ZEROED, ZEROED, ZEROED, 2, ZEROED, 1, ZEROED, 0));
+  __m128i p12 =
+      _mm_shuffle_epi8(_mm_loadl_epi64((const __m128i*) p0),
+                       _mm_set_epi8(-1, -1, -1, 5, -1, 4, -1, 3, -1, -1, -1, 2, -1, 1, -1, 0));
 
   // _ r g b _ r g b
-  __m128i p34 = _mm_shuffle_epi8(_mm_loadl_epi64((const __m128i*) (p0 + image.stride)),
-                                 _mm_set_epi8(ZEROED, ZEROED, ZEROED, 5, ZEROED, 4, ZEROED, 3,
-                                              ZEROED, ZEROED, ZEROED, 2, ZEROED, 1, ZEROED, 0));
+  __m128i p34 =
+      _mm_shuffle_epi8(_mm_loadl_epi64((const __m128i*) (p0 + image.stride)),
+                       _mm_set_epi8(-1, -1, -1, 5, -1, 4, -1, 3, -1, -1, -1, 2, -1, 1, -1, 0));
 
   // Multiply each pixel with its weight
   const __m128i out_12 = _mm_mullo_epi16(p12, w12);
@@ -106,8 +104,7 @@ static inline void write_output_pixels(__m128i pixel_1, __m128i pixel_2,
   combined = _mm_shuffle_epi8(combined,
                               _mm_set_epi8(
                                   // Upper 80 bits not used
-                                  ZEROED, ZEROED, ZEROED, ZEROED, ZEROED, ZEROED, ZEROED, ZEROED,
-                                  ZEROED, ZEROED,
+                                  -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
                                   // Packed pixel data
                                   6, 5, 4, 2, 1, 0));
 

@@ -56,8 +56,6 @@ static inline __m256i calculate_weights(const float sample_coords[8]) {
   return weights;
 }
 
-static constexpr uint8_t Z = 128;
-
 // Mask to shuffle the blue and green channels from packed 24bpp to 64bpp (16bpc) in each lane.
 // Upper and lower lanes of input should contain independent sets of 4 pixels.
 // Eg:
@@ -65,18 +63,18 @@ static constexpr uint8_t Z = 128;
 // rgb Becomes g g g g b b b b  |  g g g g b b b b
 static const __m128i MASK_SHUFFLE_BG_HALF = _mm_set_epi8(
     // green
-    Z, 12, Z, 9, Z, 4, Z, 1,
+    -1, 12, -1, 9, -1, 4, -1, 1,
     // blue
-    Z, 11, Z, 8, Z, 3, Z, 0);
+    -1, 11, -1, 8, -1, 3, -1, 0);
 
 static const __m256i MASK_SHUFFLE_BG = _mm256_set_m128i(MASK_SHUFFLE_BG_HALF, MASK_SHUFFLE_BG_HALF);
 
 // Do the same with the red channel. The upper half of each lane is not used.
 static const __m128i MASK_SHUFFLE_R0_HALF = _mm_set_epi8(
     // unused
-    Z, Z, Z, Z, Z, Z, Z, Z,
+    -1, -1, -1, -1, -1, -1, -1, -1,
     // red
-    Z, 13, Z, 10, Z, 5, Z, 2);
+    -1, 13, -1, 10, -1, 5, -1, 2);
 
 static const __m256i MASK_SHUFFLE_R0 = _mm256_set_m128i(MASK_SHUFFLE_R0_HALF, MASK_SHUFFLE_R0_HALF);
 
@@ -133,9 +131,9 @@ static inline void write_output_pixels(__m256i pixels_13, __m256i pixels_24,
   combined = _mm256_shuffle_epi8(combined,
                                  _mm256_set_epi8(
                                      // Top lane not used
-                                     Z, Z, Z, Z, Z, Z, Z, Z, Z, Z, Z, Z, Z, Z, Z, Z,
+                                     -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
                                      // Bottom lane - 32 unused bits at the top
-                                     Z, Z, Z, Z,
+                                     -1, -1, -1, -1,
                                      // Packed pixel data
                                      14, 13, 12, 10, 9, 8, 6, 5, 4, 2, 1, 0));
 
