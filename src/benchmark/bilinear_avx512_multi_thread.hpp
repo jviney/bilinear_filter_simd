@@ -15,9 +15,6 @@ public:
   }
 
   virtual void operator()(const cv::Range& range) const override {
-    auto* range_last_output_pixels =
-        output_image_.ptr<cv::Vec3b>(range.end - 1, output_image_.cols - step);
-
     for (auto y = range.start; y < range.end; y++) {
       auto* px_coords_row = coords_.ptr<cv::Vec2f>(y);
       auto* output_pixels_row = output_image_.ptr<cv::Vec3b>(y);
@@ -25,11 +22,10 @@ public:
       for (auto x = 0; x < output_image_.cols; x += step) {
         auto px_coords = px_coords_row + x;
         auto* output_pixels = output_pixels_row + x;
-        auto is_last_output_pixels = (output_pixels == range_last_output_pixels);
 
         interpolate::bilinear::avx512::interpolate(
             input_image_, reinterpret_cast<const interpolate::InputCoords*>(px_coords),
-            reinterpret_cast<interpolate::BGRPixel*>(output_pixels), !is_last_output_pixels);
+            reinterpret_cast<interpolate::BGRPixel*>(output_pixels));
       }
     }
   }
