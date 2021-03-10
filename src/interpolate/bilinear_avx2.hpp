@@ -138,7 +138,7 @@ static inline void write_output_pixels(__m256i pixels_13, __m256i pixels_24,
                                      14, 13, 12, 10, 9, 8, 6, 5, 4, 2, 1, 0));
 
   // Write out the lower 12 bytes
-  uint8_t interpolated_pixels[32];
+  alignas(32) uint8_t interpolated_pixels[32];
   _mm256_store_si256((__m256i*) interpolated_pixels, combined);
   memcpy_12((uint8_t*) output_pixels, interpolated_pixels);
 }

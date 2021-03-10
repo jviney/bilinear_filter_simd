@@ -165,7 +165,7 @@ static inline void write_output_pixels(__m512i pixels_1357, __m512i pixels_2468,
                                                  ));
 
   // Store pixel data
-  uint8_t stored[64];
+  alignas(64) uint8_t stored[64];
   _mm512_store_si512((__m512i*) stored, combined);
 
   // Write pixel data back to image.
