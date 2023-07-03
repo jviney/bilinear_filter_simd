@@ -95,10 +95,10 @@ static inline __m512i interpolate_four_pixels(const interpolate::BGRImage& image
   const auto* p3 = image.ptr(input_coords[4].y, input_coords[4].x);
   const auto* p4 = image.ptr(input_coords[6].y, input_coords[6].x);
 
-  __m512i pixels = _mm512_set_epi64(*((int64_t*) (p4 + image.stride)), *((int64_t*) p4),
-                                    *((int64_t*) (p3 + image.stride)), *((int64_t*) p3),
-                                    *((int64_t*) (p2 + image.stride)), *((int64_t*) p2),
-                                    *((int64_t*) (p1 + image.stride)), *((int64_t*) p1));
+  __m512i pixels = _mm512_set_epi64(*((int64_t*) image.ptr_below(p4)), *((int64_t*) p4),
+                                    *((int64_t*) image.ptr_below(p3)), *((int64_t*) p3),
+                                    *((int64_t*) image.ptr_below(p2)), *((int64_t*) p2),
+                                    *((int64_t*) image.ptr_below(p1)), *((int64_t*) p1));
 
   __m512i pixels_bg = _mm512_shuffle_epi8(pixels, MASK_SHUFFLE_BG);
   __m512i pixels_r0 = _mm512_shuffle_epi8(pixels, MASK_SHUFFLE_R0);

@@ -73,7 +73,7 @@ static inline __m128i interpolate_one_pixel(const interpolate::BGRImage& image,
 
   // _ r g b _ r g b
   __m128i p34 =
-      _mm_shuffle_epi8(_mm_loadl_epi64((const __m128i*) (p0 + image.stride)),
+      _mm_shuffle_epi8(_mm_loadl_epi64((const __m128i*) image.ptr_below(p0)),
                        _mm_set_epi8(-1, -1, -1, 5, -1, 4, -1, 3, -1, -1, -1, 2, -1, 1, -1, 0));
 
   // Multiply each pixel with its weight

@@ -15,8 +15,9 @@ static inline interpolate::BGRPixel interpolate(const interpolate::BGRImage& ima
 
   const auto& p1 = pixel[0];
   const auto& p2 = pixel[1];
-  const auto& p3 = pixel[image.stride];
-  const auto& p4 = pixel[image.stride + 1];
+  const auto* pixel_below = image.ptr_below(pixel);
+  const auto& p3 = pixel_below[0];
+  const auto& p4 = pixel_below[1];
 
   // Calculate the weights for each pixel
   float fx = input_coords.x - px;
@@ -52,8 +53,9 @@ static inline void interpolate_multiple(const interpolate::BGRImage& image,
     const auto* pixel = image.ptr(py, px);
     const auto& p1 = pixel[0];
     const auto& p2 = pixel[1];
-    const auto& p3 = pixel[image.stride];
-    const auto& p4 = pixel[image.stride + 1];
+    const auto* pixel_below = image.ptr_below(pixel);
+    const auto& p3 = pixel_below[0];
+    const auto& p4 = pixel_below[1];
 
     // Calculate the weights for each pixel
     float fx = input_coords[i].x - px;

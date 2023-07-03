@@ -22,14 +22,19 @@ public:
   int rows;
   int cols;
   int step;
-  int stride;
   BGRPixel* data;    // non-owner
 
   BGRImage(){};
   BGRImage(int rows, int cols, int step, BGRPixel* data)
-      : rows(rows), cols(cols), step(step), stride(step / 3), data(data) {}
+      : rows(rows), cols(cols), step(step), data(data) {}
 
-  const BGRPixel* ptr(int row, int col) const { return data + row * stride + col; }
+  inline const BGRPixel* ptr(int row, int col) const {
+    return (const BGRPixel*) (((const uint8_t*) data) + (row * step) + (col * 3));
+  }
+
+  inline const BGRPixel* ptr_below(const BGRPixel* ptr) const {
+    return (const BGRPixel*) (((const uint8_t*) ptr) + step);
+  }
 };
 
 }    // namespace interpolate

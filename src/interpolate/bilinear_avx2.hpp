@@ -85,8 +85,8 @@ static inline __m256i interpolate_two_pixels(const interpolate::BGRImage& image,
   const auto* p0_0 = image.ptr(input_coords[0].y, input_coords[0].x);
   const auto* p1_0 = image.ptr(input_coords[2].y, input_coords[2].x);
 
-  const __m256i pixels = _mm256_set_epi64x(*((int64_t*) (p1_0 + image.stride)), *((int64_t*) p1_0),
-                                           *((int64_t*) (p0_0 + image.stride)), *((int64_t*) p0_0));
+  const __m256i pixels = _mm256_set_epi64x(*((int64_t*) image.ptr_below(p1_0)), *((int64_t*) p1_0),
+                                           *((int64_t*) image.ptr_below(p0_0)), *((int64_t*) p0_0));
 
   const __m256i pixels_bg = _mm256_shuffle_epi8(pixels, MASK_SHUFFLE_BG);
   const __m256i pixels_r0 = _mm256_shuffle_epi8(pixels, MASK_SHUFFLE_R0);
