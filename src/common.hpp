@@ -41,6 +41,10 @@ static cv::Mat2f sampling_coordinates(cv::Size2i output_size, cv::Size2i input_s
 
   cv::warpAffine(coords, coords, warp, coords.size());
 
+  // This sampling coordinate will be clamped when fetching the pixel data for the next row, which
+  // is out of bounds.
+  coords(0, 0) = {float(input_size.height - 1), float(input_size.width - 1)};
+
   return coords;
 }
 

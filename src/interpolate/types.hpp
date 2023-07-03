@@ -23,17 +23,29 @@ public:
   int cols;
   int step;
   BGRPixel* data;    // non-owner
+  uintptr_t data_end;
 
   BGRImage(){};
   BGRImage(int rows, int cols, int step, BGRPixel* data)
-      : rows(rows), cols(cols), step(step), data(data) {}
+      : rows(rows),
+        cols(cols),
+        step(step),
+        data(data),
+        data_end(((uintptr_t) data) + rows * step) {}
 
   inline const BGRPixel* ptr(int row, int col) const {
-    return (const BGRPixel*) (((const uint8_t*) data) + (row * step) + (col * 3));
+    int offset = (row * step) + (col * 3);
+    return (const BGRPixel*) (((const uint8_t*) data) + offset);
   }
 
   inline const BGRPixel* ptr_below(const BGRPixel* ptr) const {
-    return (const BGRPixel*) (((const uint8_t*) ptr) + step);
+    auto end = ((uintptr_t) ptr) + step;
+
+    if (end < data_end) [[likely]] {
+      return (const BGRPixel*) end;
+    } else {
+      return ptr;
+    }
   }
 };
 
