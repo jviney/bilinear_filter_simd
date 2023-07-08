@@ -1,0 +1,9 @@
+version: "3"
+services:
+  base:
+    build: .
+    volumes:
+      - ".:/src"
+    command: tail -f /dev/null
+    working_dir: /src
+ 
